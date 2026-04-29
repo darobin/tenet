@@ -1,0 +1,26 @@
+{
+  "name": "soar",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "watch": "tauri dev",
+    "build:examples": "node examples/build-tile.mjs"
+  },
+  "dependencies": {
+    "@lit-labs/signals": "^0.2.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "lit": "^3",
+    "refrakt": "^0.3.2",
+    "signal-polyfill": "^0.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "vite": "^8.0.10"
+  }
+}

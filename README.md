@@ -1,2 +1,4 @@
-# soar
-Documents in the 21st century
+
+# Soar
+
+The first thing we do, let's kill all the PDFs.
