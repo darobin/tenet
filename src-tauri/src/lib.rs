@@ -196,7 +196,7 @@ fn handle_tile_protocol(
         return match filename {
             "store.js" => tauri::http::Response::builder()
                 .status(200)
-                .header("content-type", "text/javascript")
+                .header("content-type", "application/javascript")
                 .body(STORE_JS.as_bytes().to_vec())
                 .unwrap(),
             _ => make_error(404, "unknown well-known resource"),
@@ -209,7 +209,7 @@ fn handle_tile_protocol(
     if request.method().as_str() == "PUT" {
         let name = match path.strip_prefix("/.well-known/web-tiles-storage/") {
             Some(n) if !n.is_empty() => n.to_owned(),
-            _ => return make_error(400, "PUT only allowed under /.well-known/web-tiles-storage/"),
+            _ => return make_error(405, "PUT only allowed under /.well-known/web-tiles-storage/"),
         };
         let body = request.body().clone();
         let mut guard = store.0.lock().unwrap();
@@ -240,7 +240,7 @@ fn handle_tile_protocol(
         &path,
         if path.ends_with('/') { path.trim_end_matches('/') } else { &path },
         if !path.ends_with('/') { &with_slash } else { &path },
-        if path == "/" { "/index.html" } else { &path },
+        // if path == "/" { "/index.html" } else { &path },
     ];
 
     let resource = match candidates.iter().find_map(|p| tile.masl.resources.get(*p)) {
@@ -265,13 +265,42 @@ fn handle_tile_protocol(
     let mut builder = tauri::http::Response::builder()
         .status(200)
         .header("content-type", &content_type)
-        .header("access-control-allow-origin", "*");
+        // .header("access-control-allow-origin", "*")
+        ;
 
+    // XXX need to list accepted headers
     for (k, v) in resource {
         if k != "content-type" && k != "src" {
             builder = builder.header(k.as_str(), v.as_str());
         }
     }
+
+    builder = builder
+        .header("content-security-policy", "\
+            default-src 'self' blob: data:; \
+            script-src 'self' blob: data: 'unsafe-inline' 'wasm-unsafe-eval'; \
+            script-src-attr 'none'; \
+            style-src 'self' blob: data: 'unsafe-inline'; \
+            form-src 'self'; \
+            manifest-src 'none'; \
+            object-src 'none'; \
+            base-uri 'none'; \
+            sandbox allow-downloads \
+                    allow-forms \
+                    allow-modals \
+                    allow-popups \
+                    allow-popups-to-escape-sandbox \
+                    allow-same-origin \
+                    allow-scripts\
+            ")
+        .header("cross-origin-opener-policy", "same-origin")
+        .header("cross-origin-resource-policy", "cross-origin")
+        .header("origin-agent-cluster", "?1")
+        .header("permissions-policy", "interest-cohort=(), browsing-topics=()")
+        .header("referrer-policy", "no-referrer")
+        .header("x-content-type-options", "nosniff")
+        .header("x-dns-prefetch-control", "off")
+    ;
 
     builder.body(data).unwrap()
 }

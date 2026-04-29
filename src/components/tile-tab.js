@@ -43,8 +43,6 @@ export class TileTab extends SignalWatcher(LitElement) {
         <iframe
           style="display: ${i === activeIndex ? 'block' : 'none'}"
           src=${`tile://${tab.authority}/`}
-          sandbox="allow-forms allow-scripts allow-modals allow-same-origin"
-          referrerpolicy="no-referrer"
           title=${tab.masl.name}
         ></iframe>
       `)}
