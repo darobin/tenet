@@ -21,3 +21,5 @@ target
 #.idea/
 .claude/
 examples/
+agnosticui/
+.agnosticui-viewer/

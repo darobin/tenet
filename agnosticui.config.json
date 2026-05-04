@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agnosticui.com/schema.json",
+  "version": "2.0.0-alpha",
+  "framework": "lit",
+  "paths": {
+    "reference": "./agnosticui",
+    "components": "./src/components/ag"
+  },
+  "components": {},
+  "ai": {
+    "includeReference": true,
+    "includeContext": true,
+    "contextPath": "./agnosticui/docs"
+  },
+  "git": {
+    "commitReference": true
+  },
+  "tarball": {
+    "source": "/Users/robin/Code/darobin/soar/.tmp-ag-download/agnosticui-core-2.0.0-alpha.29.tgz",
+    "version": "2.0.0-alpha",
+    "installed": "2026-05-04T13:55:59.245Z"
+  }
+}
