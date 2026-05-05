@@ -5,12 +5,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { addTab, appStore, openTileDialog, setFullscreen } from './state.js';
+
 import './components/tab-bar.js';
 import './components/tile-tab.js';
+import './components/toolbar.js';
+import './components/ag/styles/ag-tokens.css';
+import './components/ag/styles/ag-tokens-dark.css';
 
 // ── Root app shell ────────────────────────────────────────────────────────────
 
-class TileApp extends SignalWatcher(LitElement) {
+class TileApp extends SignalWatcher (LitElement) {
   static styles = css`
     :host {
       display: flex;
@@ -20,13 +24,14 @@ class TileApp extends SignalWatcher(LitElement) {
     }
   `;
 
-  connectedCallback() {
+  connectedCallback () {
     super.connectedCallback();
 
     // Sync initial fullscreen state (e.g. restored from last session).
     getCurrentWindow()
       .isFullscreen()
-      .then((isFs) => { if (isFs) setFullscreen(true); });
+      .then((isFs) => { if (isFs) setFullscreen(true); })
+    ;
 
     // Populate tabs from session-restored tiles and any CLI-arg tiles that
     // were loaded before the webview was ready to receive events.
@@ -46,9 +51,10 @@ class TileApp extends SignalWatcher(LitElement) {
     listen('menu:open-file', openTileDialog);
   }
 
-  render() {
+  render () {
     const { fullscreen } = appStore.get();
     return html`
+      <tile-toolbar></tile-toolbar>
       ${fullscreen ? nothing : html`<tile-tab-bar></tile-tab-bar>`}
       <tile-content></tile-content>
     `;

@@ -1,10 +1,12 @@
 
 import { defineConfig } from 'vite';
+import { litTemplateLoader } from '@mordech/vite-lit-loader';
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   clearScreen: false,
+  plugins: [litTemplateLoader()],
   server: {
     host: host || false,
     port: 5173,

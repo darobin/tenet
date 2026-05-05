@@ -79,7 +79,6 @@ export class TabBar extends SignalWatcher(LitElement) {
   render() {
     const { tabs, activeIndex } = appStore.get();
     return html`
-      <button class="open-btn" @click=${this._openFile}>+ Open</button>
       ${tabs.map((tab, i) => this._renderTab(tab, i, activeIndex))}
     `;
   }

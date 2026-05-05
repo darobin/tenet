@@ -1,5 +1,7 @@
+
 import { store } from 'refrakt';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -10,7 +12,7 @@ export const SET_FULLSCREEN = 'SET_FULLSCREEN';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
-function reducer(state, action) {
+function reducer (state, action) {
   switch (action.type) {
     case ADD_TAB: {
       // Ignore if this authority is already open (guards against race between
@@ -44,30 +46,26 @@ export const appStore = store(reducer, { tabs: [], activeIndex: -1, fullscreen: 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export function addTab(authority, masl) {
+export function addTab (authority, masl) {
   appStore.send({ type: ADD_TAB, tab: { authority, masl } });
 }
 
-export function closeTab(index) {
+export function closeTab (index) {
   const { tabs } = appStore.get();
   const tab = tabs[index];
   appStore.send({ type: CLOSE_TAB, index });
   if (tab) invoke('close_tile', { authority: tab.authority });
 }
 
-export function activateTab(index) {
+export function activateTab (index) {
   appStore.send({ type: ACTIVATE_TAB, index });
 }
 
-export function setFullscreen(fullscreen) {
+export function setFullscreen (fullscreen) {
   appStore.send({ type: SET_FULLSCREEN, fullscreen });
 }
 
-export async function openTileDialog() {
-  const [{ open }, { invoke }] = await Promise.all([
-    import('@tauri-apps/plugin-dialog'),
-    import('@tauri-apps/api/core'),
-  ]);
+export async function openTileDialog () {
   const filePath = await open({
     multiple: false,
     filters: [{ name: 'Tile Documents', extensions: ['tile'] }],

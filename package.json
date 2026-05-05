@@ -22,6 +22,7 @@
     "signal-polyfill": "^0.2.0"
   },
   "devDependencies": {
+    "@mordech/vite-lit-loader": "^0.40.0",
     "@tauri-apps/cli": "^2",
     "vite": "^8.0.10"
   }
