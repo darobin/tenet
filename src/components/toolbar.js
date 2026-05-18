@@ -13,7 +13,7 @@ export class Toolbar extends SignalWatcher (LitElement) {
       overflow: hidden;
       padding: 4px;
     }
-    ag-icon-button {
+    sm-icon-button {
       margin: 0 8px;
     }
     `,
@@ -26,7 +26,7 @@ export class Toolbar extends SignalWatcher (LitElement) {
   render () {
     return html`
       <sm-icon-button label="Open tile" @click=${this.handleOpen}>
-        ${iconOpen({ slot: 'icon' })}
+        ${iconOpen()}
       </sm-icon-button>
     `;
   }
