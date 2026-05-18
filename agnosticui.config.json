@@ -12,7 +12,7 @@
       "version": "2.0.0-alpha",
       "framework": "lit",
       "files": [
-        "/Users/robin/Code/darobin/soar/src/components/ag/IconButton/core"
+        "/Users/robin/Code/darobin/tenet/src/components/ag/IconButton/core"
       ]
     }
   },
@@ -25,7 +25,7 @@
     "commitReference": true
   },
   "tarball": {
-    "source": "/Users/robin/Code/darobin/soar/.tmp-ag-download/agnosticui-core-2.0.0-alpha.29.tgz",
+    "source": "/Users/robin/Code/darobin/tenet/.tmp-ag-download/agnosticui-core-2.0.0-alpha.29.tgz",
     "version": "2.0.0-alpha",
     "installed": "2026-05-04T13:55:59.245Z"
   }
