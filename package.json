@@ -16,6 +16,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "^2",
     "@tauri-apps/plugin-dialog": "^2",
+    "@supramundane/ui": "*",
     "focus-trap": "^8.2.0",
     "lit": "^3.3.2",
     "refrakt": "^0.3.2",

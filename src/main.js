@@ -4,6 +4,7 @@ import { SignalWatcher } from '@lit-labs/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import '@supramundane/ui';
 import { addTab, appStore, openTileDialog, setFullscreen } from './state.js';
 
 import './components/tab-bar.js';
