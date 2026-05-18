@@ -5,13 +5,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import '@supramundane/ui';
+import '@supramundane/ui/tokens/light';
 import { addTab, appStore, openTileDialog, setFullscreen } from './state.js';
 
 import './components/tab-bar.js';
 import './components/tile-tab.js';
 import './components/toolbar.js';
-import './components/ag/styles/ag-tokens.css';
-import './components/ag/styles/ag-tokens-dark.css';
 
 // ── Root app shell ────────────────────────────────────────────────────────────
 

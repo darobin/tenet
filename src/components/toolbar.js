@@ -1,10 +1,10 @@
 
 import { LitElement, html, css } from 'lit';
 import { SignalWatcher } from '@lit-labs/signals';
+import { iconOpen } from '@supramundane/ui/icons';
 import { openTileDialog } from '../state.js';
 import { iconButton } from '../style.js';
 
-import { iconOpen } from '@supramundane/ui/icons';
 
 export class Toolbar extends SignalWatcher (LitElement) {
   static styles = [css`
