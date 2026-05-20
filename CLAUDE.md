@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`tile-documents` is a Rust project aimed at replacing PDFs with a better document format.
+Tenet is a viewer for a better document format.
 
 ## Project Definition
 
@@ -16,7 +16,7 @@ This project is a Tauri v2 application with the following characteristics:
   `application/tile`. When such a file is opened through typical OS means, this app is the
   one that gets to open the file (at least if it has been installed).
 - Tile files are CAR containers as defined in the Web Tiles specification at https://dasl.ing/tiles.html.
-- A good Rust implementation of CAR is `iroh-car`, a good example of using CAR in code is 
+- A good Rust implementation of CAR is `iroh-car`, a good example of using CAR in code is
   https://github.com/blacksky-algorithms/rsky/blob/main/rsky-satnav/.
 - The way in which a tile file is opened is as follows:
   1. The file is in CAR format, the CAR is parsed. The MASL from the CAR header is extracted and the `resources` entry in
@@ -48,7 +48,7 @@ Tiles can support self-modification in the following way:
 - The data in question is read/written from a special path in `resources` which is
   `/.well-known/web-tiles-storage/name` where `name` is the key provided in the API.
 - When loading data, if `name` doesn't exist you simply get a 404.
-- When putting data, that path gets added (if it doesn't exist) or updated (with the right CID) in 
+- When putting data, that path gets added (if it doesn't exist) or updated (with the right CID) in
   `resources` and the data itself stored in the CAR. If possible, that CAR entry should be at the
   end of the CAR file. Any previous CAR entry for that `name` should be deleted from the CAR.
   The CAR is then persisted to disk in place.
@@ -71,7 +71,7 @@ cargo fmt                        # format
 ## Architecture
 
 ```
-tile-documents/
+tenet/
 ├── index.html            # Vite entry point
 ├── src/
 │   ├── main.js           # Root <tile-app> element; listens for tile:opened events

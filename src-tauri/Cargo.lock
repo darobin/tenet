@@ -3944,6 +3944,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tenet"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ciborium",
+ "cid",
+ "multihash",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-dialog",
+ "tauri-plugin-shell",
+ "tauri-plugin-window-state",
+ "tokio",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3981,26 +4001,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "tile-documents"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ciborium",
- "cid",
- "multihash",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-deep-link",
- "tauri-plugin-dialog",
- "tauri-plugin-shell",
- "tauri-plugin-window-state",
- "tokio",
 ]
 
 [[package]]

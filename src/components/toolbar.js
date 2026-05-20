@@ -12,6 +12,7 @@ export class Toolbar extends SignalWatcher (LitElement) {
       display: flex;
       overflow: hidden;
       padding: 4px;
+      min-height: 32px;
     }
     sm-icon-button {
       margin: 0 8px;

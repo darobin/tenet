@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for tile-documents",
+  "description": "Default capability for Tenet",
   "windows": ["main"],
   "permissions": [
     "core:default",

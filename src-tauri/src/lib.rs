@@ -333,7 +333,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::PredefinedMenuItem;
-                let app_menu = SubmenuBuilder::new(app, "Tile Documents")
+                let app_menu = SubmenuBuilder::new(app, "Tenet")
                     .item(&PredefinedMenuItem::about(app, None, None)?)
                     .separator()
                     .item(&PredefinedMenuItem::services(app, None)?)

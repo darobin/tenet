@@ -4,9 +4,9 @@ import { SignalWatcher } from '@lit-labs/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import '@supramundane/ui';
+import '@supramundane/ui/icon-button';
 import '@supramundane/ui/tokens/light';
-import { addTab, appStore, openTileDialog, setFullscreen } from './state.js';
+import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab } from './state.js';
 
 import './components/tab-bar.js';
 import './components/tile-tab.js';
@@ -22,19 +22,30 @@ class TileApp extends SignalWatcher (LitElement) {
       height: 100vh;
       overflow: hidden;
     }
+    .empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-size: 15px;
+    }
+    sm-tabbed-pane {
+      flex-grow: 1;
+    }
+    iframe {
+      height: 100%;
+      width: 100%;
+      border: none;
+    }
   `;
 
   connectedCallback () {
     super.connectedCallback();
-
-    // Sync initial fullscreen state (e.g. restored from last session).
     getCurrentWindow()
       .isFullscreen()
       .then((isFs) => { if (isFs) setFullscreen(true); })
     ;
-
-    // Populate tabs from session-restored tiles and any CLI-arg tiles that
-    // were loaded before the webview was ready to receive events.
     invoke('get_open_tiles').then((tiles) => {
       for (const tile of tiles) addTab(tile.authority, tile.masl);
     });
@@ -51,12 +62,30 @@ class TileApp extends SignalWatcher (LitElement) {
     listen('menu:open-file', openTileDialog);
   }
 
+  // XXX bring fullscreen back
   render () {
-    const { fullscreen } = appStore.get();
+    // const { fullscreen } = appStore.get();
+    const { tabs, activeIndex } = appStore.get();
     return html`
       <tile-toolbar></tile-toolbar>
-      ${fullscreen ? nothing : html`<tile-tab-bar></tile-tab-bar>`}
-      <tile-content></tile-content>
+      ${
+        (!tabs.length || activeIndex < 0)
+        ? html`<div class="empty">Open a .tile file to get started</div>`
+        : html`
+          <sm-tabbed-pane closable>
+          ${tabs.map((tab, i) => html`
+              <sm-tab-panel label=${tab.masl.name}>
+                ${(() => {
+                  const iconSrc = tab.masl.icons?.[0]?.src;
+                  const iconUrl = iconSrc ? `tile://${tab.authority}${iconSrc}` : nothing;
+                  return iconSrc ? html`<img src=${iconUrl} alt="icon" slot="icon">` : nothing;
+                })()}
+                <iframe src=${`tile://${tab.authority}/`}></iframe>
+              </sm-tab-panel>
+          `)}
+          </sm-tabbed-pane>
+        `
+      }
     `;
   }
 }
