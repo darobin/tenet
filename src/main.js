@@ -5,6 +5,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import '@supramundane/ui/icon-button';
+import '@supramundane/ui/tab-panel';
+import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/tokens/light';
 import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab } from './state.js';
 

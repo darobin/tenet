@@ -515,14 +515,9 @@ fn read_cid(data: &[u8]) -> Option<(Cid, usize)> {
 /// Derive a `tile:` URI authority from the full file name.
 /// e.g. `"My Document.tile"` → `"my-document.tile"`.
 pub fn authority_from_path(path: &Path) -> String {
-    let name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("tile");
-    name.to_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '-' })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string()
+    let path_bytes = path.as_os_str().as_encoded_bytes();
+    let hash = Sha256::digest(path_bytes);
+    let mh = multihash::Multihash::<64>::wrap(0x12, hash.as_ref())
+        .expect("sha2-256 digest is always valid");
+    Cid::new_v1(0x55, mh).to_string()
 }
