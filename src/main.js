@@ -49,15 +49,18 @@ class TileApp extends SignalWatcher (LitElement) {
       .then((isFs) => { if (isFs) setFullscreen(true); })
     ;
     invoke('get_open_tiles').then((tiles) => {
+      console.warn(`get_open_tiles`, tiles);
       for (const tile of tiles) addTab(tile.authority, tile.masl);
     });
 
     listen('tile:opened', (event) => {
       const { authority, masl } = event.payload;
+      console.warn(`tile:opened`, authority, masl);
       addTab(authority, masl);
     });
 
     listen('tile:fullscreen-changed', (event) => {
+      console.warn(`tile:fullscreen-changed`, event.payload);
       setFullscreen(event.payload);
     });
 
