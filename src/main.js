@@ -10,8 +10,6 @@ import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/tokens/light';
 import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab } from './state.js';
 
-import './components/tab-bar.js';
-import './components/tile-tab.js';
 import './components/toolbar.js';
 
 // ── Root app shell ────────────────────────────────────────────────────────────
@@ -67,19 +65,34 @@ class TileApp extends SignalWatcher (LitElement) {
     listen('menu:open-file', openTileDialog);
   }
 
+  #handleActivateTab (ev) {
+    console.warn(`HANDLE ACTIVATE`, ev);
+    ev.preventDefault();
+    activateTab(ev.detail.activeIndex);
+  }
+  #handleCloseTab (ev) {
+    console.warn(`HANDLE CLOSE`);
+    ev.preventDefault();
+    closeTab(ev.detail.activeIndex);
+  }
+
   // XXX bring fullscreen back
+  // Events
+  //  - need to call activateTab
+  //  - need to call closeTab
   render () {
     // const { fullscreen } = appStore.get();
     const { tabs, activeIndex } = appStore.get();
+    console.warn(`rendering ${activeIndex} of`, tabs);
     return html`
       <tile-toolbar></tile-toolbar>
       ${
         (!tabs.length || activeIndex < 0)
         ? html`<div class="empty">Open a .tile file to get started</div>`
         : html`
-          <sm-tabbed-pane closable>
-          ${tabs.map((tab, i) => html`
-              <sm-tab-panel label=${tab.masl.name}>
+          <sm-tabbed-pane closable @sm-activate-tab=${this.#handleActivateTab} @sm-close-tab=${this.#handleCloseTab}>
+          ${tabs.map((tab, idx) => html`
+              <sm-tab-panel label=${tab.masl.name} ?active=${idx === activeIndex}>
                 ${(() => {
                   const iconSrc = tab.masl.icons?.[0]?.src;
                   const iconUrl = iconSrc ? `tile://${tab.authority}${iconSrc}` : nothing;

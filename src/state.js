@@ -17,7 +17,10 @@ function reducer (state, action) {
     case ADD_TAB: {
       // Ignore if this authority is already open (guards against race between
       // get_open_tiles and tile:opened events both delivering the same tile).
-      if (state.tabs.some((t) => t.authority === action.tab.authority)) return state;
+      const existsIndex = state.tabs.findIndex((t) => t.authority === action.tab.authority)
+      if (existsIndex > -1) {
+        return { ...state, activeIndex: existsIndex };
+      }
       const tabs = [...state.tabs, action.tab];
       return { tabs, activeIndex: tabs.length - 1 };
     }
@@ -43,6 +46,7 @@ function reducer (state, action) {
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const appStore = store(reducer, { tabs: [], activeIndex: -1, fullscreen: false });
+window.appStore = appStore;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
