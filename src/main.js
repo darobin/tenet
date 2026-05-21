@@ -66,24 +66,19 @@ class TileApp extends SignalWatcher (LitElement) {
   }
 
   #handleActivateTab (ev) {
-    console.warn(`HANDLE ACTIVATE`, ev);
     ev.preventDefault();
     activateTab(ev.detail.activeIndex);
   }
   #handleCloseTab (ev) {
-    console.warn(`HANDLE CLOSE`);
     ev.preventDefault();
     closeTab(ev.detail.activeIndex);
+    activateTab(ev.detail.nextIndex);
   }
 
   // XXX bring fullscreen back
-  // Events
-  //  - need to call activateTab
-  //  - need to call closeTab
   render () {
     // const { fullscreen } = appStore.get();
     const { tabs, activeIndex } = appStore.get();
-    console.warn(`rendering ${activeIndex} of`, tabs);
     return html`
       <tile-toolbar></tile-toolbar>
       ${
