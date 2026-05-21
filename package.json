@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "watch": "tauri dev",
+    "build-tauri": "tauri build",
     "build:examples": "node examples/build-tile.mjs"
   },
   "dependencies": {
