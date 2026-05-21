@@ -8,7 +8,7 @@ import '@supramundane/ui/icon-button';
 import '@supramundane/ui/tab-panel';
 import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/tokens/light';
-import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab } from './state.js';
+import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab } from './state.js';
 
 import './components/toolbar.js';
 
@@ -50,19 +50,17 @@ class TileApp extends SignalWatcher (LitElement) {
       console.warn(`get_open_tiles`, tiles);
       for (const tile of tiles) addTab(tile.authority, tile.masl);
     });
-
     listen('tile:opened', (event) => {
       const { authority, masl } = event.payload;
       console.warn(`tile:opened`, authority, masl);
       addTab(authority, masl);
     });
-
     listen('tile:fullscreen-changed', (event) => {
       console.warn(`tile:fullscreen-changed`, event.payload);
       setFullscreen(event.payload);
     });
-
     listen('menu:open-file', openTileDialog);
+    listen('menu:close-file', closeActiveTab);
   }
 
   #handleActivateTab (ev) {
@@ -72,7 +70,7 @@ class TileApp extends SignalWatcher (LitElement) {
   #handleCloseTab (ev) {
     ev.preventDefault();
     closeTab(ev.detail.activeIndex);
-    activateTab(ev.detail.nextIndex);
+    // activateTab(ev.detail.nextIndex); // XXX testing without, shouldn't be needed
   }
 
   // XXX bring fullscreen back

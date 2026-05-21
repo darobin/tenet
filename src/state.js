@@ -61,6 +61,11 @@ export function closeTab (index) {
   if (tab) invoke('close_tile', { authority: tab.authority });
 }
 
+export function closeActiveTab () {
+  const { activeIndex } = appStore.get();
+  return closeTab(activeIndex);
+}
+
 export function activateTab (index) {
   appStore.send({ type: ACTIVATE_TAB, index });
 }

@@ -328,7 +328,13 @@ pub fn run() {
             let open_item = MenuItemBuilder::with_id("open_file", "Open…")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
-            let file_menu = SubmenuBuilder::new(app, "File").item(&open_item).build()?;
+            let close_item = MenuItemBuilder::with_id("close_file", "Close")
+                .accelerator("CmdOrCtrl+W")
+                .build(app)?;
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&open_item)
+                .item(&close_item)
+                .build()?;
 
             #[cfg(target_os = "macos")]
             {
@@ -366,6 +372,9 @@ pub fn run() {
             match event.id().as_ref() {
                 "open_file" => {
                     let _ = app.emit("menu:open-file", ());
+                }
+                "close_file" => {
+                    let _ = app.emit("menu:close-file", ());
                 }
                 "toggle_fullscreen" => {
                     if let Some(window) = app.get_webview_window("main") {
