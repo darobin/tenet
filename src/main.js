@@ -73,17 +73,16 @@ class TileApp extends SignalWatcher (LitElement) {
     // activateTab(ev.detail.nextIndex); // XXX testing without, shouldn't be needed
   }
 
-  // XXX bring fullscreen back
   render () {
-    // const { fullscreen } = appStore.get();
+    const { fullscreen } = appStore.get();
     const { tabs, activeIndex } = appStore.get();
     return html`
-      <tile-toolbar></tile-toolbar>
+      ${fullscreen ? nothing : html`<tile-toolbar></tile-toolbar>`}
       ${
         (!tabs.length || activeIndex < 0)
         ? html`<div class="empty">Open a .tile file to get started</div>`
         : html`
-          <sm-tabbed-pane closable @sm-activate-tab=${this.#handleActivateTab} @sm-close-tab=${this.#handleCloseTab}>
+          <sm-tabbed-pane closable ?fullscreen=${fullscreen} @sm-activate-tab=${this.#handleActivateTab} @sm-close-tab=${this.#handleCloseTab}>
           ${tabs.map((tab, idx) => html`
               <sm-tab-panel label=${tab.masl.name} ?active=${idx === activeIndex}>
                 ${(() => {
