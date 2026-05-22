@@ -50,8 +50,9 @@ window.appStore = appStore;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export function addTab (authority, masl) {
+export async function addTab (authority, masl) {
   appStore.send({ type: ADD_TAB, tab: { authority, masl } });
+  await invoke('set_title', { authority });
 }
 
 export function closeTab (index) {
@@ -66,8 +67,11 @@ export function closeActiveTab () {
   return closeTab(activeIndex);
 }
 
-export function activateTab (index) {
+export async function activateTab (index) {
   appStore.send({ type: ACTIVATE_TAB, index });
+  const { tabs } = appStore.get();
+  const tab = tabs[index];
+  await invoke('set_title', { authority: tab.authority });
 }
 
 export function setFullscreen (fullscreen) {

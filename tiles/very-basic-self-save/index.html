@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Very Basic Text</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      font-family: monospace;
+      min-height: 95vh;
+    }
+    textarea {
+      flex-grow: 1;
+      border: 1px solid #000;
+      font-size: 1rem;
+      padding: 0.5rem;
+    }
+    #status {
+      font-size: 0.8rem;
+      text-align: right;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <textarea name="body" id="body" placeholder="Type in some text…"></textarea>
+  <div id="status"></div>
+  <script type="module">
+    const { loadData, putData } = await import('/.well-known/web-tiles/store.js');
+    const body = document.getElementById('body');
+    const status = document.getElementById('status');
+    function setStatus (text) {
+      status.textContent = text;
+    }
+    // load
+    const bytes = await loadData('text');
+    if (bytes) {
+      body.value = new TextDecoder().decode(bytes);
+      setStatus('Content loaded');
+    }
+    else {
+      setStatus('Brand new document');
+    }
+    body.focus();
+
+    let timer;
+    body.addEventListener('input', () => {
+      setStatus('Unsaved…');
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await putData('text', new TextEncoder().encode(body.value));
+        setStatus('Saved');
+      }, 600);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "Very Basic Text",
+  "description": "All the self-saving text/",
+  "short_name": "Very Basic",
+  "icons": [{ "src": "/icon.png" }]
+}

@@ -67,6 +67,61 @@ fn set_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) {
     let _ = window.set_fullscreen(fullscreen);
 }
 
+fn decode_svg_icon(bytes: &[u8]) -> Option<tauri::image::Image<'static>> {
+    use resvg::{tiny_skia, usvg};
+    let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).ok()?;
+    let size = tree.size();
+    let scale = 64.0_f32 / size.width().max(size.height());
+    let w = (size.width() * scale).round() as u32;
+    let h = (size.height() * scale).round() as u32;
+    let mut pixmap = tiny_skia::Pixmap::new(w.max(1), h.max(1))?;
+    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    Some(tauri::image::Image::new_owned(pixmap.take(), w.max(1), h.max(1)))
+}
+
+fn tile_icon_image(tile: &car::TileContent) -> Option<tauri::image::Image<'static>> {
+    let src = &tile.masl.icons.first()?.src;
+    let rooted = if src.starts_with('/') { src.clone() } else { format!("/{src}") };
+    let resource = tile.masl.resources.get(&rooted)
+        .or_else(|| tile.masl.resources.get(src.as_str()))?;
+    let cid = resource.get("src")?;
+    let content_type = resource.get("content-type").map(|s| s.as_str()).unwrap_or("");
+    let bytes = tile.read_block(cid).ok()?;
+    if content_type == "image/svg+xml" {
+        decode_svg_icon(&bytes)
+    } else {
+        let img = image::load_from_memory(&bytes).ok()?;
+        let rgba = img.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        Some(tauri::image::Image::new_owned(rgba.into_raw(), w, h))
+    }
+}
+
+#[tauri::command]
+fn set_title(
+    authority: Option<String>,
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, TileStore>,
+) {
+    match authority.as_deref().filter(|a| !a.is_empty()) {
+        None => {
+            let _ = window.set_title("Tenet");
+            if let Some(icon) = app.default_window_icon() {
+                let _ = window.set_icon(icon.clone());
+            }
+        }
+        Some(auth) => {
+            let store = state.0.lock().unwrap();
+            let Some(tile) = store.map.get(auth) else { return };
+            let _ = window.set_title(&tile.masl.name);
+            if let Some(image) = tile_icon_image(tile) {
+                let _ = window.set_icon(image);
+            }
+        }
+    }
+}
+
 /// Remove a tile from the store when its tab is closed in the frontend, so
 /// that the session file stays accurate.
 #[tauri::command]
@@ -326,7 +381,7 @@ pub fn run() {
         .register_uri_scheme_protocol("tile", |ctx, request| {
             handle_tile_protocol(ctx.app_handle(), request)
         })
-        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen])
+        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title])
         .menu(|app| {
             let mut builder = MenuBuilder::new(app);
 
