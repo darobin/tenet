@@ -8,6 +8,7 @@ import '@supramundane/ui/icon-button';
 import '@supramundane/ui/tab-panel';
 import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/tokens/light';
+import '../css/arepo.css';
 import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab } from './state.js';
 
 import './components/toolbar.js';

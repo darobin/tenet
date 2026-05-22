@@ -1,0 +1,56 @@
+
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Regular.ttf");
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Regular.ttf");
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Italic.ttf");
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Bold.ttf");
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-BoldItalic.ttf");
+  font-weight: 700;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Thin.ttf");
+  font-weight: 100;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-ThinItalic.ttf");
+  font-weight: 100;
+  font-style: italic;
+}
+
+:root {
+  --sm-font-sans: Barlow;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--ag-background-primary);
+  color: var(--ag-text-primary);
+}
