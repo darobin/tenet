@@ -7,11 +7,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import '@supramundane/ui/icon-button';
 import '@supramundane/ui/tab-panel';
 import '@supramundane/ui/tabbed-pane';
+import '@supramundane/ui/toolbar';
 import '@supramundane/ui/tokens/light';
+import { iconOpen, iconFullscreen } from '@supramundane/ui/icons';
 import '../css/arepo.css';
 import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab } from './state.js';
-
-import './components/toolbar.js';
 
 // ── Root app shell ────────────────────────────────────────────────────────────
 
@@ -64,6 +64,9 @@ class TileApp extends SignalWatcher (LitElement) {
     listen('menu:close-file', closeActiveTab);
   }
 
+  #handleOpen (ev) {
+    return openTileDialog();
+  }
   #handleActivateTab (ev) {
     ev.preventDefault();
     activateTab(ev.detail.activeIndex);
@@ -73,12 +76,27 @@ class TileApp extends SignalWatcher (LitElement) {
     closeTab(ev.detail.activeIndex);
     // activateTab(ev.detail.nextIndex); // XXX testing without, shouldn't be needed
   }
+  #handleFullscreen (ev) {
+    invoke('set_fullscreen', { fullscreen: true });
+  }
 
   render () {
     const { fullscreen } = appStore.get();
     const { tabs, activeIndex } = appStore.get();
     return html`
-      ${fullscreen ? nothing : html`<tile-toolbar></tile-toolbar>`}
+      ${
+        fullscreen
+        ? nothing
+        : html`<sm-toolbar variant="flat">
+            <sm-icon-button label="Open tile" @click=${this.#handleOpen}>
+              ${iconOpen()}
+            </sm-icon-button>
+            <hr>
+            <sm-icon-button label="Full screen" @click=${this.#handleFullscreen}>
+              ${iconFullscreen()}
+            </sm-icon-button>
+          </sm-toolbar>`
+      }
       ${
         (!tabs.length || activeIndex < 0)
         ? html`<div class="empty">Open a .tile file to get started</div>`

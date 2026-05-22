@@ -62,6 +62,11 @@ fn get_open_tiles(state: State<'_, TileStore>) -> Vec<TileOpenedPayload> {
         .collect()
 }
 
+#[tauri::command]
+fn set_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) {
+    let _ = window.set_fullscreen(fullscreen);
+}
+
 /// Remove a tile from the store when its tab is closed in the frontend, so
 /// that the session file stays accurate.
 #[tauri::command]
@@ -321,7 +326,7 @@ pub fn run() {
         .register_uri_scheme_protocol("tile", |ctx, request| {
             handle_tile_protocol(ctx.app_handle(), request)
         })
-        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile])
+        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen])
         .menu(|app| {
             let mut builder = MenuBuilder::new(app);
 
