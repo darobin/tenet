@@ -1,9 +1,39 @@
 
 @font-face {
   font-family: "Barlow";
-  src: url("Barlow-Regular.ttf");
-  font-weight: 400;
+  src: url("Barlow-Thin.ttf");
+  font-weight: 100;
   font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-ThinItalic.ttf");
+  font-weight: 100;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-ExtraLight.ttf");
+  font-weight: 200;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-ExtraLightItalic.ttf");
+  font-weight: 200;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Light.ttf");
+  font-weight: 300;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-LightItalic.ttf");
+  font-weight: 300;
+  font-style: italic;
 }
 @font-face {
   font-family: "Barlow";
@@ -15,6 +45,30 @@
   font-family: "Barlow";
   src: url("Barlow-Italic.ttf");
   font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Medium.ttf");
+  font-weight: 500;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-MediumItalic.ttf");
+  font-weight: 500;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-SemiBold.ttf");
+  font-weight: 600;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-SemiBoldItalic.ttf");
+  font-weight: 600;
   font-style: italic;
 }
 @font-face {
@@ -31,14 +85,26 @@
 }
 @font-face {
   font-family: "Barlow";
-  src: url("Barlow-Thin.ttf");
-  font-weight: 100;
+  src: url("Barlow-ExtraBold.ttf");
+  font-weight: 800;
   font-style: normal;
 }
 @font-face {
   font-family: "Barlow";
-  src: url("Barlow-ThinItalic.ttf");
-  font-weight: 100;
+  src: url("Barlow-ExtraBoldItalic.ttf");
+  font-weight: 800;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-Black.ttf");
+  font-weight: 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("Barlow-BlackItalic.ttf");
+  font-weight: 900;
   font-style: italic;
 }
 
