@@ -49,12 +49,12 @@ class TileApp extends SignalWatcher (LitElement) {
     ;
     invoke('get_open_tiles').then((tiles) => {
       console.warn(`get_open_tiles`, tiles);
-      for (const tile of tiles) addTab(tile.authority, tile.masl);
+      for (const tile of tiles) addTab(tile.authority, tile.masl, tile.url);
     });
     listen('tile:opened', (event) => {
-      const { authority, masl } = event.payload;
+      const { authority, masl, url } = event.payload;
       console.warn(`tile:opened`, authority, masl);
-      addTab(authority, masl);
+      addTab(authority, masl, url);
     });
     listen('tile:fullscreen-changed', (event) => {
       console.warn(`tile:fullscreen-changed`, event.payload);
@@ -106,10 +106,10 @@ class TileApp extends SignalWatcher (LitElement) {
               <sm-tab-panel label=${tab.masl.name} ?active=${idx === activeIndex}>
                 ${(() => {
                   const iconSrc = tab.masl.icons?.[0]?.src;
-                  const iconUrl = iconSrc ? `tile://${tab.authority}${iconSrc}` : nothing;
+                  const iconUrl = iconSrc ? new URL(iconSrc, tab.url).href : nothing;
                   return iconSrc ? html`<img src=${iconUrl} alt="icon" slot="icon">` : nothing;
                 })()}
-                <iframe src=${`tile://${tab.authority}/`}></iframe>
+                <iframe src=${tab.url}></iframe>
               </sm-tab-panel>
           `)}
           </sm-tabbed-pane>

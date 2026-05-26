@@ -50,8 +50,8 @@ window.appStore = appStore;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export async function addTab (authority, masl) {
-  appStore.send({ type: ADD_TAB, tab: { authority, masl } });
+export async function addTab (authority, masl, url) {
+  appStore.send({ type: ADD_TAB, tab: { authority, masl, url } });
   await invoke('set_title', { authority });
 }
 

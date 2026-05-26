@@ -26,7 +26,17 @@ struct TileStore(Mutex<TileStoreInner>);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TileOpenedPayload {
     pub authority: String,
+    /// Platform-correct base URL for the tile iframe: `tile://<authority>/` on
+    /// macOS/Linux, `https://tile.<authority>/` on Windows (WRY workaround).
+    pub url: String,
     pub masl: Masl,
+}
+
+fn tile_origin(authority: &str) -> String {
+    #[cfg(windows)]
+    return format!("https://tile.{authority}/");
+    #[cfg(not(windows))]
+    return format!("tile://{authority}/");
 }
 
 // ── Commands ─────────────────────────────────────────────────────────────────
@@ -55,6 +65,7 @@ fn get_open_tiles(state: State<'_, TileStore>) -> Vec<TileOpenedPayload> {
         .filter_map(|path| {
             let authority = authority_from_path(path);
             store.map.get(&authority).map(|content| TileOpenedPayload {
+                url: tile_origin(&authority),
                 authority,
                 masl: content.masl.clone(),
             })
@@ -102,7 +113,7 @@ fn load_tile(
 ) -> anyhow::Result<TileOpenedPayload> {
     let content = parse_tile(path)?;
     let authority = authority_from_path(path);
-    let payload = TileOpenedPayload { authority: authority.clone(), masl: content.masl.clone() };
+    let payload = TileOpenedPayload { url: tile_origin(&authority), authority: authority.clone(), masl: content.masl.clone() };
     {
         let mut store = state.0.lock().unwrap();
         if !store.map.contains_key(&authority) {
