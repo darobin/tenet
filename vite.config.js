@@ -12,7 +12,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     hmr: host ? { protocol: 'ws', host, port: 5183 } : undefined,
-    watch: { ignored: ['**/src-tauri/**'] },
+    watch: { ignored: ['**/src-tauri/**', '**/tiles/**'] },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
