@@ -47,9 +47,9 @@ jobs:
             rust-targets: ''
     runs-on: ${{ matrix.runner }}
     env:
-      # Expose at job level so the step `if` condition can read them.
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      # Boolean flag only — never expose the raw cert at job level so it
+      # cannot leak into the tauri-action process environment.
+      APPLE_SIGNING_CONFIGURED: ${{ secrets.APPLE_CERTIFICATE != '' && 'true' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,11 +75,15 @@ jobs:
 
       - run: npm install
 
-      # Import the certificate ourselves so tauri-action never sees an empty
-      # APPLE_CERTIFICATE and tries (and fails) to call `security import` itself.
-      # Skipped entirely when the secret is not configured.
+      # Import the certificate and push signing vars into $GITHUB_ENV so they
+      # are available to tauri-action. When the secret is not configured this
+      # step is skipped entirely, leaving no Apple vars in the environment and
+      # preventing the Tauri bundler from attempting to sign at all.
       - name: Import Apple certificate
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        if: runner.os == 'macOS' && env.APPLE_SIGNING_CONFIGURED == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           CERT_PATH=$RUNNER_TEMP/cert.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
@@ -91,19 +95,20 @@ jobs:
           security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
+          # Publish signing vars for the tauri-action step via $GITHUB_ENV.
+          # APPLE_CERTIFICATE is intentionally omitted — cert is in the keychain.
+          {
+            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}"
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
+          } >> "$GITHUB_ENV"
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Clear these so tauri-action doesn't attempt its own import —
-          # the certificate is already in the keychain from the step above.
-          APPLE_CERTIFICATE: ''
-          APPLE_CERTIFICATE_PASSWORD: ''
-          # Notarisation — set these secrets to enable signing + notarisation.
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Apple signing vars arrive via $GITHUB_ENV when configured above.
+          # When not configured, none of them are present and Tauri skips signing.
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
