@@ -1,10 +1,11 @@
 {
-  "name": "Very Basic Text",
+  "name": "Simple Text File",
   "description": "All the self-saving text.",
   "model": {
-    "name": "Very Basic Text",
+    "name": "Very Basic Text Editor",
     "description": "All the self-saving text.",
-    "author": "robin.berjon.com"
+    "author": "robin.berjon.com",
+    "id": "com.berjon.tiles.very-basic-text-editor"
   },
   "icons": [{ "src": "/icon.png" }]
 }
