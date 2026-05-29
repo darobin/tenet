@@ -33,8 +33,12 @@ pub struct TileOpenedPayload {
 }
 
 fn tile_origin(authority: &str) -> String {
+    // On Windows, WRY's WebView2 workaround requires the host to be `localhost`
+    // (the only resolvable special hostname). The authority goes in the first
+    // path segment: https://tile.localhost/<authority>/
+    // On macOS/Linux the authority is the host: tile://<authority>/
     #[cfg(windows)]
-    return format!("https://tile.{authority}/");
+    return format!("https://tile.{authority}.localhost/");
     #[cfg(not(windows))]
     return format!("tile://{authority}/");
 }
@@ -207,9 +211,21 @@ fn handle_tile_protocol(
     request: tauri::http::Request<Vec<u8>>,
 ) -> tauri::http::Response<Vec<u8>> {
     let uri = request.uri();
-    let authority = uri.host().unwrap_or("").to_owned();
-    let raw_path = uri.path();
-    let path = if raw_path.is_empty() { "/".to_owned() } else { raw_path.to_owned() };
+    // On Windows, WRY reverts https://tile.<authority>.localhost/path back to
+    // tile://<authority>.localhost/path before calling this handler.
+    // Strip .localhost to recover the bare authority; path is unchanged.
+    #[cfg(windows)]
+    let (authority, path) = {
+        let host = uri.host().unwrap_or("");
+        let auth = host.strip_suffix(".localhost").unwrap_or(host).to_owned();
+        let p = uri.path();
+        (auth, if p.is_empty() { "/".to_owned() } else { p.to_owned() })
+    };
+    #[cfg(not(windows))]
+    let (authority, path) = {
+        let p = uri.path();
+        (uri.host().unwrap_or("").to_owned(), if p.is_empty() { "/".to_owned() } else { p.to_owned() })
+    };
 
     let make_error = |status: u16, msg: &str| {
         tauri::http::Response::builder()
