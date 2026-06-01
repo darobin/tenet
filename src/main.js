@@ -9,7 +9,7 @@ import '@supramundane/ui/tab-panel';
 import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/toolbar';
 import '@supramundane/ui/tokens/light';
-import { iconOpen, iconFullscreen } from '@supramundane/ui/icons';
+import { iconOpen, iconFullscreen, iconReload } from '@supramundane/ui/icons';
 import '../css/arepo.css';
 import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab } from './state.js';
 
@@ -79,6 +79,11 @@ class TileApp extends SignalWatcher (LitElement) {
   #handleFullscreen (ev) {
     invoke('set_fullscreen', { fullscreen: true });
   }
+  #handleReload () {
+    const ifr = this.shadowRoot.querySelector('sm-tab-panel[active] iframe');
+    if (!ifr) return;
+    ifr.src = ifr.src;
+  }
 
   render () {
     const { fullscreen } = appStore.get();
@@ -90,6 +95,9 @@ class TileApp extends SignalWatcher (LitElement) {
         : html`<sm-toolbar variant="flat">
             <sm-icon-button label="Open tile" @click=${this.#handleOpen}>
               ${iconOpen()}
+            </sm-icon-button>
+            <sm-icon-button label="Reload tile" @click=${this.#handleReload}>
+              ${iconReload()}
             </sm-icon-button>
             <hr>
             <sm-icon-button label="Full screen" @click=${this.#handleFullscreen}>
