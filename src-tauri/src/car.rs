@@ -23,6 +23,8 @@ pub struct Masl {
     #[serde(default)]
     pub icons: Vec<Icon>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_name: Option<String>,
@@ -53,9 +55,25 @@ pub struct TileContent {
     pub roots: Vec<Cid>,
     /// CID (canonical string form) → (byte offset of block data, byte length)
     pub index: HashMap<String, (u64, u64)>,
+    /// mtime of the file at last parse; used to detect external modifications.
+    pub mtime: std::time::SystemTime,
 }
 
 impl TileContent {
+    /// If the file has been modified externally since the last parse, re-parse
+    /// it and update masl, roots, index, and mtime in place.
+    pub fn refresh_if_stale(&mut self) -> Result<()> {
+        let current = std::fs::metadata(&self.path)?.modified()?;
+        if current != self.mtime {
+            let fresh = parse_tile(&self.path)?;
+            self.masl = fresh.masl;
+            self.roots = fresh.roots;
+            self.index = fresh.index;
+            self.mtime = fresh.mtime;
+        }
+        Ok(())
+    }
+
     /// Read the raw bytes of the block identified by `cid_str`.
     pub fn read_block(&self, cid_str: &str) -> Result<Vec<u8>> {
         let &(offset, len) = self
@@ -76,6 +94,7 @@ impl TileContent {
 /// a CID→offset index built from the file's blocks.
 pub fn parse_tile(path: &Path) -> Result<TileContent> {
     let mut f = File::open(path)?;
+    let mtime = f.metadata()?.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
     let mut data = Vec::new();
     f.read_to_end(&mut data)?;
 
@@ -121,7 +140,7 @@ pub fn parse_tile(path: &Path) -> Result<TileContent> {
         pos = block_end;
     }
 
-    Ok(TileContent { path: path.to_path_buf(), masl, roots, index })
+    Ok(TileContent { path: path.to_path_buf(), masl, roots, index, mtime })
 }
 
 // ── MASL extraction from CBOR header ─────────────────────────────────────────
@@ -139,6 +158,7 @@ fn parse_header(header_bytes: &[u8]) -> Result<(Masl, Vec<Cid>)> {
     let mut name: Option<String> = None;
     let mut resources: HashMap<String, Resource> = HashMap::new();
     let mut icons: Vec<Icon> = Vec::new();
+    let mut model: Option<String> = None;
     let mut description: Option<String> = None;
     let mut short_name: Option<String> = None;
     let mut theme_color: Option<String> = None;
@@ -149,6 +169,7 @@ fn parse_header(header_bytes: &[u8]) -> Result<(Masl, Vec<Cid>)> {
         let key = cbor_to_string(k).unwrap_or_default();
         match key.as_str() {
             "name" => name = cbor_to_string(v),
+            "model" => model = cbor_to_cid_string(v).or_else(|| cbor_to_string(v)),
             "description" => description = cbor_to_string(v),
             "short_name" => short_name = cbor_to_string(v),
             "theme_color" => theme_color = cbor_to_string(v),
@@ -173,6 +194,7 @@ fn parse_header(header_bytes: &[u8]) -> Result<(Masl, Vec<Cid>)> {
             name: name.ok_or_else(|| anyhow!("MASL missing `name` field"))?,
             resources,
             icons,
+            model,
             description,
             short_name,
             theme_color,
@@ -343,9 +365,51 @@ pub fn write_tile_data(tile: &mut TileContent, name: &str, data: Vec<u8>) -> Res
     std::fs::write(&temp_path, &out)?;
     std::fs::rename(&temp_path, &tile.path)?;
 
-    // ── 8. Update the in-memory index ─────────────────────────────────────
+    // ── 8. Update the in-memory index and mtime ───────────────────────────
     tile.index = new_index;
+    tile.mtime = std::fs::metadata(&tile.path)?.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
 
+    Ok(())
+}
+
+/// Rewrite the CAR in place using the current in-memory MASL, recomputing all
+/// block offsets. Call this after mutating `tile.masl` fields (e.g. `name`).
+pub fn flush_header(tile: &mut TileContent) -> Result<()> {
+    let mut file_data = Vec::new();
+    File::open(&tile.path)?.read_to_end(&mut file_data)?;
+
+    let header_cbor = build_header_cbor(&tile.masl, &tile.roots);
+    let mut header_bytes = Vec::new();
+    ciborium::ser::into_writer(&header_cbor, &mut header_bytes)
+        .map_err(|e| anyhow!("CBOR serialisation error: {e}"))?;
+
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(&encode_uvarint(header_bytes.len() as u64));
+    out.extend_from_slice(&header_bytes);
+
+    let mut new_index: HashMap<String, (u64, u64)> = HashMap::new();
+    for (cid_str, &(offset, len)) in &tile.index {
+        let cid = Cid::try_from(cid_str.as_str())
+            .map_err(|e| anyhow!("invalid CID {cid_str}: {e}"))?;
+        let cid_bytes = cid.to_bytes();
+        let block_data = &file_data[offset as usize..(offset + len) as usize];
+        out.extend_from_slice(&encode_uvarint((cid_bytes.len() + block_data.len()) as u64));
+        out.extend_from_slice(&cid_bytes);
+        let data_offset = out.len() as u64;
+        out.extend_from_slice(block_data);
+        new_index.insert(cid_str.clone(), (data_offset, block_data.len() as u64));
+    }
+
+    let parent = tile.path.parent().unwrap_or(Path::new("."));
+    let file_name = tile.path.file_name().and_then(|n| n.to_str()).unwrap_or("tile");
+    let temp_path = parent.join(format!(".{file_name}.tmp"));
+    std::fs::write(&temp_path, &out)?;
+    std::fs::rename(&temp_path, &tile.path)?;
+
+    tile.index = new_index;
+    tile.mtime = std::fs::metadata(&tile.path)?
+        .modified()
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
     Ok(())
 }
 
@@ -391,6 +455,10 @@ fn build_header_cbor(masl: &Masl, roots: &[Cid]) -> CborValue {
 
     // MASL fields
     map.push((CborValue::Text("name".into()), CborValue::Text(masl.name.clone())));
+    if let Some(v) = &masl.model {
+        let model_cbor = cid_str_to_cbor_link(v).unwrap_or_else(|| CborValue::Text(v.clone()));
+        map.push((CborValue::Text("model".into()), model_cbor));
+    }
     if let Some(v) = &masl.description {
         map.push((CborValue::Text("description".into()), CborValue::Text(v.clone())));
     }

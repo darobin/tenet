@@ -9,9 +9,9 @@ export const ADD_TAB = 'ADD_TAB';
 export const CLOSE_TAB = 'CLOSE_TAB';
 export const ACTIVATE_TAB = 'ACTIVATE_TAB';
 export const SET_FULLSCREEN = 'SET_FULLSCREEN';
+export const SET_TILE_NAME = 'SET_TILE_NAME';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
-
 function reducer (state, action) {
   switch (action.type) {
     case ADD_TAB: {
@@ -38,18 +38,22 @@ function reducer (state, action) {
     case SET_FULLSCREEN: {
       return { ...state, fullscreen: action.fullscreen };
     }
+    case SET_TILE_NAME: {
+      // XXX
+      // - find index
+      // - splice tabs with updated name
+      return { ...state, fullscreen: action.fullscreen };
+    }
     default:
       return state;
   }
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
-
 export const appStore = store(reducer, { tabs: [], activeIndex: -1, fullscreen: false });
 window.appStore = appStore;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
+// ── Interface ─────────────────────────────────────────────────────────────────
 export async function addTab (authority, masl, url) {
   appStore.send({ type: ADD_TAB, tab: { authority, masl, url } });
   await invoke('set_title', { authority });
@@ -84,4 +88,18 @@ export async function openTileDialog () {
     filters: [{ name: 'Tile Documents', extensions: ['tile'] }],
   });
   if (filePath) await invoke('open_tile', { path: filePath });
+}
+
+export async function setTileName (authority, name) {
+  name = name.trim().replace(/\s{2,}/, ' ');
+  if (name && name.length <= 300) {
+    appStore.send({ type: SET_TILE_NAME, authority, name });
+    await invoke('set_tile_name', { authority, name });
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+export function activeTab () {
+  const { tabs, activeIndex } = appStore.get();
+  return tabs[activeIndex];
 }

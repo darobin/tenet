@@ -9,12 +9,13 @@ import '@supramundane/ui/tab-panel';
 import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/toolbar';
 import '@supramundane/ui/tokens/light';
-import { iconOpen, iconFullscreen, iconReload } from '@supramundane/ui/icons';
+import { folder2Open, fullscreen, arrowClockwise } from '@supramundane/ui/icons';
 import '../css/arepo.css';
 import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab } from './state.js';
+import './el/model-header.js';
+
 
 // ── Root app shell ────────────────────────────────────────────────────────────
-
 class TileApp extends SignalWatcher (LitElement) {
   static styles = css`
     :host {
@@ -86,22 +87,22 @@ class TileApp extends SignalWatcher (LitElement) {
   }
 
   render () {
-    const { fullscreen } = appStore.get();
+    const { fullscreen: isFullscreen } = appStore.get();
     const { tabs, activeIndex } = appStore.get();
     return html`
       ${
-        fullscreen
+        isFullscreen
         ? nothing
         : html`<sm-toolbar variant="flat">
             <sm-icon-button label="Open tile" @click=${this.#handleOpen}>
-              ${iconOpen()}
+              ${folder2Open()}
             </sm-icon-button>
             <sm-icon-button label="Reload tile" @click=${this.#handleReload}>
-              ${iconReload()}
+              ${arrowClockwise()}
             </sm-icon-button>
             <hr>
             <sm-icon-button label="Full screen" @click=${this.#handleFullscreen}>
-              ${iconFullscreen()}
+              ${fullscreen()}
             </sm-icon-button>
           </sm-toolbar>`
       }
@@ -109,7 +110,7 @@ class TileApp extends SignalWatcher (LitElement) {
         (!tabs.length || activeIndex < 0)
         ? html`<div class="empty">Open a .tile file to get started</div>`
         : html`
-          <sm-tabbed-pane closable ?fullscreen=${fullscreen} @sm-activate-tab=${this.#handleActivateTab} @sm-close-tab=${this.#handleCloseTab}>
+          <sm-tabbed-pane closable ?fullscreen=${isFullscreen} @sm-activate-tab=${this.#handleActivateTab} @sm-close-tab=${this.#handleCloseTab}>
           ${tabs.map((tab, idx) => html`
               <sm-tab-panel label=${tab.masl.name} ?active=${idx === activeIndex}>
                 ${(() => {
@@ -117,6 +118,7 @@ class TileApp extends SignalWatcher (LitElement) {
                   const iconUrl = iconSrc ? new URL(iconSrc, tab.url).href : nothing;
                   return iconSrc ? html`<img src=${iconUrl} alt="icon" slot="icon">` : nothing;
                 })()}
+                <tnt-model-header></tnt-model-header>
                 <iframe src=${tab.url}></iframe>
               </sm-tab-panel>
           `)}

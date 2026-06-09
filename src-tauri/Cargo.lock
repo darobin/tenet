@@ -3961,6 +3961,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-window-state",
  "tokio",
+ "unicode-segmentation",
 ]
 
 [[package]]

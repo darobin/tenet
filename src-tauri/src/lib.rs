@@ -1,6 +1,7 @@
 mod car;
 
-use car::{authority_from_path, parse_tile, write_tile_data, Masl, TileContent};
+use car::{authority_from_path, flush_header, parse_tile, write_tile_data, Masl, TileContent};
+use unicode_segmentation::UnicodeSegmentation as _;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -92,6 +93,26 @@ fn set_title(authority: Option<String>, window: tauri::WebviewWindow, state: Sta
             let _ = window.set_title(&tile.masl.name);
         }
     }
+}
+
+#[tauri::command]
+fn set_tile_name(name: String, authority: String, state: State<'_, TileStore>) -> Result<(), String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("name must not be empty".into());
+    }
+    if trimmed.graphemes(true).count() > 300 {
+        return Err("name must not exceed 300 graphemes".into());
+    }
+    let mut store = state.0.lock().unwrap();
+    let Some(tile) = store.map.get_mut(&authority) else {
+        return Err("tile not found".into());
+    };
+    if tile.masl.model.is_none() {
+        return Err("tile does not have a model field".into());
+    }
+    tile.masl.name = trimmed.to_owned();
+    flush_header(tile).map_err(|e| e.to_string())
 }
 
 /// Remove a tile from the store when its tab is closed in the frontend, so
@@ -271,12 +292,14 @@ fn handle_tile_protocol(
     }
 
     // ── GET: serve tile resources ─────────────────────────────────────────
-    let guard = store.0.lock().unwrap();
+    let mut guard = store.0.lock().unwrap();
 
-    let tile = match guard.map.get(&authority) {
+    let tile = match guard.map.get_mut(&authority) {
         Some(t) => t,
         None => return make_error(404, "tile not loaded"),
     };
+    // Re-parse the CAR if it was modified externally since the last read.
+    let _ = tile.refresh_if_stale();
 
     // Try exact path, then with/without trailing slash, then /index.html fallback.
     let with_slash = format!("{path}/");
@@ -349,6 +372,79 @@ fn handle_tile_protocol(
     builder.body(data).unwrap()
 }
 
+// ── Window geometry ───────────────────────────────────────────────────────────
+
+/// After `restore_state` reapplies the saved position and size, validate that
+/// the window is actually on an available monitor and fits within it.
+///
+/// - If the window centre falls inside a known monitor: clamp size/position so
+///   the whole window is visible on that monitor.
+/// - If the window is entirely off-screen (monitor was unplugged or resolution
+///   changed): centre the window on the primary monitor (or the first one),
+///   clamping the size to fit.
+///
+/// Maximised and fullscreen windows are left untouched.
+fn fix_window_geometry(window: &tauri::WebviewWindow) {
+    if window.is_maximized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false) {
+        return;
+    }
+    let Ok(monitors) = window.available_monitors() else { return };
+    if monitors.is_empty() { return; }
+    let Ok(pos) = window.outer_position() else { return };
+    let Ok(size) = window.outer_size() else { return };
+
+    // Use the window centre to decide which monitor "owns" it.
+    let cx = pos.x + size.width as i32 / 2;
+    let cy = pos.y + size.height as i32 / 2;
+
+    let on_screen = monitors.iter().find(|m| {
+        let mp = m.position();
+        let ms = m.size();
+        cx >= mp.x
+            && cx < mp.x + ms.width as i32
+            && cy >= mp.y
+            && cy < mp.y + ms.height as i32
+    });
+
+    // Determine the target monitor and whether we need to re-centre.
+    let (mp, ms, needs_centre) = match on_screen {
+        Some(m) => (*m.position(), *m.size(), false),
+        None => {
+            let fallback = window
+                .primary_monitor()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| monitors[0].clone());
+            (*fallback.position(), *fallback.size(), true)
+        }
+    };
+
+    // Clamp size to the target monitor.
+    let w = size.width.min(ms.width);
+    let h = size.height.min(ms.height);
+
+    let (x, y) = if needs_centre {
+        // Centre on the fallback monitor.
+        (
+            mp.x + (ms.width as i32 - w as i32) / 2,
+            mp.y + (ms.height as i32 - h as i32) / 2,
+        )
+    } else {
+        // Clamp position so the whole window stays inside its monitor.
+        (
+            pos.x.clamp(mp.x, mp.x + ms.width as i32 - w as i32),
+            pos.y.clamp(mp.y, mp.y + ms.height as i32 - h as i32),
+        )
+    };
+
+    if w != size.width || h != size.height {
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w, height: h }));
+    }
+    if x != pos.x || y != pos.y {
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+    }
+}
+
 // ── App entry point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -365,7 +461,7 @@ pub fn run() {
         .register_uri_scheme_protocol("tile", |ctx, request| {
             handle_tile_protocol(ctx.app_handle(), request)
         })
-        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title])
+        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name])
         .menu(|app| {
             let mut builder = MenuBuilder::new(app);
 
@@ -439,6 +535,7 @@ pub fn run() {
             // Restore window geometry (position, size, fullscreen).
             if let Some(window) = app_handle.get_webview_window("main") {
                 let _ = window.restore_state(StateFlags::all());
+                fix_window_geometry(&window);
 
                 let app_for_event = app_handle.clone();
                 let last_fs = Arc::new(AtomicBool::new(
