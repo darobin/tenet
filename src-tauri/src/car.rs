@@ -3,7 +3,7 @@ use cid::Cid;
 use ciborium::value::Value as CborValue;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -20,6 +20,9 @@ pub type Resource = HashMap<String, String>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelManifest {
     pub name: String,
+    /// Stable template identity. Required to add the tile to the model library.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(default)]
     pub icons: Vec<Icon>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -297,6 +300,7 @@ fn parse_model_manifest(v: &CborValue) -> Result<ModelManifest> {
         _ => bail!("`model` is not a CBOR map"),
     };
     let mut name: Option<String> = None;
+    let mut id: Option<String> = None;
     let mut icons: Vec<Icon> = Vec::new();
     let mut description: Option<String> = None;
     let mut short_name: Option<String> = None;
@@ -306,6 +310,7 @@ fn parse_model_manifest(v: &CborValue) -> Result<ModelManifest> {
         let key = cbor_to_string(k).unwrap_or_default();
         match key.as_str() {
             "name" => name = cbor_to_string(mv),
+            "id" => id = cbor_to_string(mv),
             "description" => description = cbor_to_string(mv),
             "short_name" => short_name = cbor_to_string(mv),
             "theme_color" => theme_color = cbor_to_string(mv),
@@ -316,6 +321,7 @@ fn parse_model_manifest(v: &CborValue) -> Result<ModelManifest> {
     }
     Ok(ModelManifest {
         name: name.ok_or_else(|| anyhow!("model missing `name` field"))?,
+        id,
         icons,
         description,
         short_name,
@@ -462,6 +468,115 @@ pub fn flush_header(tile: &mut TileContent) -> Result<()> {
     Ok(())
 }
 
+// ── Model library ──────────────────────────────────────────────────────────────
+
+/// True for resource paths that hold a tile's self-modifying storage. These are
+/// stripped when a tile is turned into a reusable model/template.
+fn is_storage_path(path: &str) -> bool {
+    path.starts_with("/.well-known/web-tiles-storage/")
+}
+
+/// Derive a filesystem-safe stem from a model `id`. The id is slugified
+/// (lowercased, non-alphanumerics collapsed to `-`) and suffixed with a short
+/// hash of the raw id, so the result is both readable and collision-free.
+pub fn safe_model_stem(id: &str) -> String {
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for c in id.chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
+    }
+    let slug = slug.trim_matches('-');
+    let hash = Sha256::digest(id.as_bytes());
+    let suffix: String = hash.iter().take(4).map(|b| format!("{b:02x}")).collect();
+    if slug.is_empty() {
+        suffix
+    } else {
+        format!("{slug}-{suffix}")
+    }
+}
+
+/// Write a model/template tile derived from `source` to `dest`:
+/// - top-level MASL metadata (name, description, icons, …) is replaced with the
+///   `model` field's values,
+/// - the `model` field is retained (so instances created from it stay
+///   model-backed and the id is preserved),
+/// - self-storage resources (`/.well-known/web-tiles-storage/…`) and their
+///   blocks are stripped.
+///
+/// Errors if `source` has no `model` field. The caller is responsible for
+/// requiring `model.id`.
+pub fn write_model_tile(source: &TileContent, dest: &Path) -> Result<()> {
+    let model = source
+        .masl
+        .model
+        .as_ref()
+        .ok_or_else(|| anyhow!("tile has no `model` field"))?;
+
+    // Build the stripped MASL with model metadata hoisted to the top level.
+    let mut masl = source.masl.clone();
+    masl.name = model.name.clone();
+    masl.description = model.description.clone();
+    masl.short_name = model.short_name.clone();
+    masl.theme_color = model.theme_color.clone();
+    masl.background_color = model.background_color.clone();
+    masl.icons = model.icons.clone();
+    masl.resources.retain(|path, _| !is_storage_path(path));
+
+    // Blocks to keep: those referenced by surviving resources, plus any roots.
+    let mut kept: HashSet<String> = HashSet::new();
+    for r in masl.resources.values() {
+        if let Some(src) = r.get("src") {
+            kept.insert(src.clone());
+        }
+    }
+    for root in &source.roots {
+        kept.insert(root.to_string());
+    }
+
+    let mut file_data = Vec::new();
+    File::open(&source.path)?.read_to_end(&mut file_data)?;
+
+    let header_cbor = build_header_cbor(&masl, &source.roots);
+    let mut header_bytes = Vec::new();
+    ciborium::ser::into_writer(&header_cbor, &mut header_bytes)
+        .map_err(|e| anyhow!("CBOR serialisation error: {e}"))?;
+
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(&encode_uvarint(header_bytes.len() as u64));
+    out.extend_from_slice(&header_bytes);
+
+    for (cid_str, &(offset, len)) in &source.index {
+        if !kept.contains(cid_str) {
+            continue; // drop blocks only referenced by stripped storage
+        }
+        let cid = Cid::try_from(cid_str.as_str())
+            .map_err(|e| anyhow!("invalid CID {cid_str}: {e}"))?;
+        let cid_bytes = cid.to_bytes();
+        let block = &file_data[offset as usize..(offset + len) as usize];
+        out.extend_from_slice(&encode_uvarint((cid_bytes.len() + block.len()) as u64));
+        out.extend_from_slice(&cid_bytes);
+        out.extend_from_slice(block);
+    }
+
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let file_name = dest.file_name().and_then(|n| n.to_str()).unwrap_or("model");
+    let temp_path = dest
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!(".{file_name}.tmp"));
+    std::fs::write(&temp_path, &out)?;
+    std::fs::rename(&temp_path, dest)?;
+    Ok(())
+}
+
 // ── CAR write helpers ─────────────────────────────────────────────────────────
 
 /// Encode `n` as an unsigned LEB128 varint.
@@ -494,6 +609,9 @@ fn cid_str_to_cbor_link(s: &str) -> Option<CborValue> {
 fn build_model_cbor(model: &ModelManifest) -> CborValue {
     let mut map: Vec<(CborValue, CborValue)> = Vec::new();
     map.push((CborValue::Text("name".into()), CborValue::Text(model.name.clone())));
+    if let Some(v) = &model.id {
+        map.push((CborValue::Text("id".into()), CborValue::Text(v.clone())));
+    }
     if let Some(v) = &model.description {
         map.push((CborValue::Text("description".into()), CborValue::Text(v.clone())));
     }
@@ -669,4 +787,65 @@ pub fn authority_from_path(path: &Path) -> String {
     let mh = multihash::Multihash::<64>::wrap(0x12, hash.as_ref())
         .expect("sha2-256 digest is always valid");
     Cid::new_v1(0x55, mh).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tiles/very-basic-self-save.tile")
+    }
+
+    #[test]
+    fn safe_stem_is_filesystem_safe_and_deterministic() {
+        let s = safe_model_stem("https://example.com/My App!");
+        assert!(s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+        assert!(!s.starts_with('-') && !s.ends_with('-'));
+        assert_eq!(safe_model_stem("abc"), safe_model_stem("abc"));
+        assert_ne!(safe_model_stem("a"), safe_model_stem("b"));
+        // ids that slugify identically stay distinct via the hash suffix
+        assert_ne!(safe_model_stem("a b"), safe_model_stem("a/b"));
+    }
+
+    #[test]
+    fn model_tile_strips_storage_and_hoists_metadata() {
+        let src = sample();
+        if !src.exists() {
+            eprintln!("sample tile missing, skipping");
+            return;
+        }
+        let tmp = std::env::temp_dir().join(format!("tenet-model-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let work = tmp.join("work.tile");
+        std::fs::copy(&src, &work).unwrap();
+
+        let mut tile = parse_tile(&work).unwrap();
+        assert!(tile.masl.model.is_some(), "sample must carry a model field");
+        let model_name = tile.masl.model.as_ref().unwrap().name.clone();
+
+        // Add a self-storage entry so there is something to strip.
+        write_tile_data(&mut tile, "text", b"hello world".to_vec()).unwrap();
+        let blocks_with_storage = tile.index.len();
+        assert!(tile
+            .masl
+            .resources
+            .keys()
+            .any(|p| is_storage_path(p)));
+
+        let model_dest = tmp.join("model.tile");
+        write_model_tile(&tile, &model_dest).unwrap();
+        let model_tile = parse_tile(&model_dest).unwrap();
+
+        // Storage resources and their block are gone.
+        assert!(!model_tile.masl.resources.keys().any(|p| is_storage_path(p)));
+        assert!(model_tile.index.len() < blocks_with_storage);
+        // Non-storage resources survive.
+        assert!(model_tile.masl.resources.contains_key("/"));
+        // Top-level metadata is taken from the model, and the model is retained.
+        assert_eq!(model_tile.masl.name, model_name);
+        assert!(model_tile.masl.model.is_some());
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
 }

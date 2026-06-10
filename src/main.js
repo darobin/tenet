@@ -11,7 +11,7 @@ import '@supramundane/ui/toolbar';
 import '@supramundane/ui/tokens/light';
 import { folder2Open, fullscreen, arrowClockwise } from '@supramundane/ui/icons';
 import '../css/arepo.css';
-import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab } from './state.js';
+import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab, updateModels } from './state.js';
 import './el/model-header.js';
 
 
@@ -51,6 +51,9 @@ class TileApp extends SignalWatcher (LitElement) {
     invoke('get_open_tiles').then((tiles) => {
       console.warn(`get_open_tiles`, tiles);
       for (const tile of tiles) addTab(tile.authority, tile.masl, tile.url);
+    });
+    listen('models:changed', (ev) => {
+      updateModels(ev.payload);
     });
     listen('tile:opened', (event) => {
       const { authority, masl, url } = event.payload;

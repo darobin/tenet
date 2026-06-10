@@ -1,6 +1,10 @@
 mod car;
 
-use car::{authority_from_path, flush_header, parse_tile, write_tile_data, Masl, TileContent};
+use car::{
+    authority_from_path, flush_header, parse_tile, safe_model_stem, write_model_tile,
+    write_tile_data, Masl, TileContent,
+};
+use tauri_plugin_dialog::DialogExt;
 use unicode_segmentation::UnicodeSegmentation as _;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -29,6 +33,16 @@ pub struct TileOpenedPayload {
     pub authority: String,
     /// Platform-correct base URL for the tile iframe: `tile://<authority>/` on
     /// macOS/Linux, `https://tile.<authority>/` on Windows (WRY workaround).
+    pub url: String,
+    pub masl: Masl,
+}
+
+/// A model/template in the user's library. `url` is the `tile:` origin under
+/// which the model's resources (e.g. its icon) can be loaded by the frontend.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelEntry {
+    pub id: String,
+    pub authority: String,
     pub url: String,
     pub masl: Masl,
 }
@@ -127,6 +141,95 @@ fn close_tile(authority: String, state: State<'_, TileStore>, app: AppHandle) {
     save_session(&app);
 }
 
+// ── Model library commands ──────────────────────────────────────────────────────
+
+/// Add (or update) the currently-open tile identified by `authority` to the
+/// model library. The tile must carry a `model` field with an `id`. The stored
+/// model has its top-level metadata taken from `model`, its self-storage
+/// stripped, and is keyed on disk by `model.id` — so re-adding the same id
+/// overwrites it (i.e. this is an upsert / update).
+#[tauri::command]
+fn add_model(
+    authority: String,
+    state: State<'_, TileStore>,
+    app: AppHandle,
+) -> Result<ModelEntry, String> {
+    let dest = {
+        let store = state.0.lock().unwrap();
+        let tile = store.map.get(&authority).ok_or("tile not loaded")?;
+        let model = tile.masl.model.as_ref().ok_or("tile has no model field")?;
+        let id = model.id.as_deref().filter(|s| !s.trim().is_empty()).ok_or("model has no id")?;
+        let dest = model_file_path(&app, id).ok_or("no app data dir")?;
+        write_model_tile(tile, &dest).map_err(|e| e.to_string())?;
+        dest
+    };
+    let entry = load_model(&state, &dest).map_err(|e| e.to_string())?;
+    emit_models(&app);
+    Ok(entry)
+}
+
+/// Remove a model from the library by `id`. When `to_trash` is true the model
+/// file is moved to the OS trash/recycle bin (restorable by the user) instead of
+/// being permanently deleted.
+#[tauri::command]
+fn remove_model(
+    id: String,
+    to_trash: bool,
+    state: State<'_, TileStore>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let path = model_file_path(&app, &id).ok_or("no app data dir")?;
+    let authority = authority_from_path(&path);
+    if path.exists() {
+        if to_trash {
+            trash::delete(&path).map_err(|e| e.to_string())?;
+        } else {
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+    }
+    state.0.lock().unwrap().map.remove(&authority);
+    emit_models(&app);
+    Ok(())
+}
+
+/// List every model in the library with its metadata. Each entry is also loaded
+/// into the store so its icon is reachable at `tile://<authority>/<icon>`.
+#[tauri::command]
+fn list_models(state: State<'_, TileStore>, app: AppHandle) -> Vec<ModelEntry> {
+    collect_models(&state, &app)
+}
+
+/// Create a new tile from the model with the given `id`: prompt for a `.tile`
+/// save location, copy the model there, and open it in a new tab. The save
+/// dialog is non-blocking; the new tab appears via the usual `tile:opened`
+/// event once the user picks a destination.
+#[tauri::command]
+fn create_tile_from_model(id: String, app: AppHandle) -> Result<(), String> {
+    let model_path = model_file_path(&app, &id).ok_or("no app data dir")?;
+    if !model_path.exists() {
+        return Err(format!("no model with id {id}"));
+    }
+    let default_name = format!("{}.tile", safe_model_stem(&id));
+    let app_for_cb = app.clone();
+    app.dialog()
+        .file()
+        .add_filter("Tile Documents", &["tile"])
+        .set_file_name(&default_name)
+        .save_file(move |maybe_path| {
+            let Some(file_path) = maybe_path else { return };
+            let Ok(mut dest) = file_path.into_path() else { return };
+            if dest.extension().and_then(|e| e.to_str()) != Some("tile") {
+                dest.set_extension("tile");
+            }
+            if std::fs::copy(&model_path, &dest).is_err() {
+                return;
+            }
+            let state = app_for_cb.state::<TileStore>();
+            let _ = load_tile(&dest, &state, &app_for_cb);
+        });
+    Ok(())
+}
+
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 /// Parse a tile, insert it into the store (skipping duplicates), and emit
@@ -149,6 +252,63 @@ fn load_tile(
     app.emit("tile:opened", &payload)?;
     save_session(app);
     Ok(payload)
+}
+
+// ── Model library ──────────────────────────────────────────────────────────────
+
+/// Directory under the app data dir that holds the user's model/template tiles.
+fn models_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("models"))
+}
+
+/// Deterministic on-disk path for the model with the given `id`.
+fn model_file_path(app: &AppHandle, id: &str) -> Option<PathBuf> {
+    models_dir(app).map(|d| d.join(format!("{}.tile", safe_model_stem(id))))
+}
+
+/// Parse a model tile from disk, (re)insert it into the store under its
+/// authority — so the `tile:` protocol can serve its icon — and build a
+/// `ModelEntry`. Model tiles live in `map` but never in `paths`, so they don't
+/// become tabs or get written to the session.
+fn load_model(state: &State<'_, TileStore>, path: &Path) -> anyhow::Result<ModelEntry> {
+    let content = parse_tile(path)?;
+    let id = content
+        .masl
+        .model
+        .as_ref()
+        .and_then(|m| m.id.clone())
+        .ok_or_else(|| anyhow::anyhow!("model tile is missing `model.id`"))?;
+    let authority = authority_from_path(path);
+    let masl = content.masl.clone();
+    {
+        let mut store = state.0.lock().unwrap();
+        store.map.insert(authority.clone(), content);
+    }
+    Ok(ModelEntry { id, url: tile_origin(&authority), authority, masl })
+}
+
+/// Read the whole library from disk into a sorted list of `ModelEntry`, loading
+/// each model into the store so its icon is reachable over the `tile:` protocol.
+fn collect_models(state: &State<'_, TileStore>, app: &AppHandle) -> Vec<ModelEntry> {
+    let Some(dir) = models_dir(app) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let mut models: Vec<ModelEntry> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("tile"))
+        .filter_map(|p| load_model(state, &p).ok())
+        .collect();
+    models.sort_by(|a, b| a.masl.name.to_lowercase().cmp(&b.masl.name.to_lowercase()));
+    models
+}
+
+/// Emit the current model library to the frontend as `models:changed`. Sent on
+/// launch (and webview reloads) and after every add/update/removal, so the
+/// frontend can keep its model list in sync without polling.
+fn emit_models(app: &AppHandle) {
+    let state = app.state::<TileStore>();
+    let models = collect_models(&state, app);
+    let _ = app.emit("models:changed", &models);
 }
 
 // ── Session persistence ───────────────────────────────────────────────────────
@@ -526,7 +686,7 @@ pub fn run() {
         .register_uri_scheme_protocol("tile", |ctx, request| {
             handle_tile_protocol(ctx.app_handle(), request)
         })
-        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name])
+        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name, add_model, remove_model, list_models, create_tile_from_model])
         .menu(|app| {
             let mut builder = MenuBuilder::new(app);
 
@@ -639,6 +799,15 @@ pub fn run() {
                 _ => {
                     handle_window_menu(app, id);
                 }
+            }
+        })
+        .on_page_load(|webview, payload| {
+            // Once the main window's document has loaded (initial launch and any
+            // reload), push the current model library so the frontend can seed
+            // and maintain its list from the `models:changed` event alone.
+            use tauri::webview::PageLoadEvent;
+            if webview.label() == "main" && payload.event() == PageLoadEvent::Finished {
+                emit_models(webview.app_handle());
             }
         })
         .setup(|app| {

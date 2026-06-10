@@ -10,6 +10,7 @@ export const CLOSE_TAB = 'CLOSE_TAB';
 export const ACTIVATE_TAB = 'ACTIVATE_TAB';
 export const SET_FULLSCREEN = 'SET_FULLSCREEN';
 export const SET_TILE_NAME = 'SET_TILE_NAME';
+export const UPDATE_MODELS = 'UPDATE_MODELS';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 function reducer (state, action) {
@@ -47,13 +48,17 @@ function reducer (state, action) {
       newTabs[targetIndex].masl.name = action.name;
       return { ...state, tabs: newTabs };
     }
+    // This could be more subtle and only change the state for those that have actually changed
+    case UPDATE_MODELS: {
+      return { ...state, models: action.models };
+    }
     default:
       return state;
   }
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
-export const appStore = store(reducer, { tabs: [], activeIndex: -1, fullscreen: false });
+export const appStore = store(reducer, { tabs: [], activeIndex: -1, fullscreen: false, models: [] });
 window.appStore = appStore;
 
 // ── Interface ─────────────────────────────────────────────────────────────────
@@ -99,6 +104,10 @@ export async function setTileName (authority, name) {
     appStore.send({ type: SET_TILE_NAME, authority, name });
     await invoke('set_tile_name', { authority, name });
   }
+}
+
+export function updateModels (models) {
+  appStore.send({ type: UPDATE_MODELS, models });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
