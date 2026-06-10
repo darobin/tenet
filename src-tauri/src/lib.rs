@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Listener, Manager, State};
-use tauri_plugin_window_state::{Builder as WindowStateBuilder, StateFlags, WindowExt};
+use tauri_plugin_window_state::Builder as WindowStateBuilder;
 
 // ── Shared state ─────────────────────────────────────────────────────────────
 
@@ -445,6 +445,71 @@ fn fix_window_geometry(window: &tauri::WebviewWindow) {
     }
 }
 
+// ── Window placement actions (menu commands) ────────────────────────────────────
+
+/// A region of the current monitor's work area to snap the window into.
+enum ScreenRegion {
+    Fill,
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+/// macOS-style "Zoom": toggle the window between maximized and its previous size.
+fn window_zoom(window: &tauri::WebviewWindow) {
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    } else {
+        let _ = window.maximize();
+    }
+}
+
+/// Resize/position the window to a region of the current monitor's *work area*
+/// (the screen minus the menu bar, dock, and taskbar).
+fn window_snap(window: &tauri::WebviewWindow, region: ScreenRegion) {
+    let Some(monitor) = window.current_monitor().ok().flatten() else { return };
+    let area = monitor.work_area();
+    let (ax, ay) = (area.position.x, area.position.y);
+    let (aw, ah) = (area.size.width, area.size.height);
+
+    let (x, y, w, h) = match region {
+        ScreenRegion::Fill => (ax, ay, aw, ah),
+        ScreenRegion::Left => (ax, ay, aw / 2, ah),
+        ScreenRegion::Right => (ax + (aw / 2) as i32, ay, aw - aw / 2, ah),
+        ScreenRegion::Top => (ax, ay, aw, ah / 2),
+        ScreenRegion::Bottom => (ax, ay + (ah / 2) as i32, aw, ah - ah / 2),
+    };
+
+    // A maximized window ignores manual size/position changes until restored.
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    }
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w, height: h }));
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+}
+
+/// Dispatch a window menu command by id against the main window. Returns `true`
+/// if the id was a window command (handled here), `false` otherwise.
+fn handle_window_menu(app: &AppHandle, id: &str) -> bool {
+    let Some(window) = app.get_webview_window("main") else {
+        // Still report window-command ids as handled so they aren't misrouted.
+        return id.starts_with("win_");
+    };
+    match id {
+        "win_minimize" => { let _ = window.minimize(); }
+        "win_zoom" => window_zoom(&window),
+        "win_center" => { let _ = window.center(); }
+        "win_fill" => window_snap(&window, ScreenRegion::Fill),
+        "win_left" => window_snap(&window, ScreenRegion::Left),
+        "win_right" => window_snap(&window, ScreenRegion::Right),
+        "win_top" => window_snap(&window, ScreenRegion::Top),
+        "win_bottom" => window_snap(&window, ScreenRegion::Bottom),
+        _ => return false,
+    }
+    true
+}
+
 // ── App entry point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -493,7 +558,39 @@ pub fn run() {
                 let view = SubmenuBuilder::new(app, "View")
                     .item(&PredefinedMenuItem::fullscreen(app, None)?)
                     .build()?;
-                builder = builder.item(&app_menu).item(&file_menu).item(&view);
+
+                // Window menu: native Minimize plus Zoom and a Move & Resize set
+                // (Fill / Center / halves) snapping to the screen's work area.
+                let zoom = MenuItemBuilder::with_id("win_zoom", "Zoom").build(app)?;
+                let fill = MenuItemBuilder::with_id("win_fill", "Fill")
+                    .accelerator("Ctrl+Alt+F").build(app)?;
+                let center = MenuItemBuilder::with_id("win_center", "Center").build(app)?;
+                let left = MenuItemBuilder::with_id("win_left", "Left Half")
+                    .accelerator("Ctrl+Cmd+Left").build(app)?;
+                let right = MenuItemBuilder::with_id("win_right", "Right Half")
+                    .accelerator("Ctrl+Cmd+Right").build(app)?;
+                let top = MenuItemBuilder::with_id("win_top", "Top Half")
+                    .accelerator("Ctrl+Cmd+Up").build(app)?;
+                let bottom = MenuItemBuilder::with_id("win_bottom", "Bottom Half")
+                    .accelerator("Ctrl+Cmd+Down").build(app)?;
+                let window_menu = SubmenuBuilder::new(app, "Window")
+                    .item(&PredefinedMenuItem::minimize(app, None)?)
+                    .item(&zoom)
+                    .separator()
+                    .item(&fill)
+                    .item(&center)
+                    .separator()
+                    .item(&left)
+                    .item(&right)
+                    .item(&top)
+                    .item(&bottom)
+                    .build()?;
+
+                builder = builder
+                    .item(&app_menu)
+                    .item(&file_menu)
+                    .item(&view)
+                    .item(&window_menu);
             }
 
             #[cfg(not(target_os = "macos"))]
@@ -503,13 +600,30 @@ pub fn run() {
                         .accelerator("F11")
                         .build(app)?;
                 let view = SubmenuBuilder::new(app, "View").item(&toggle_fs).build()?;
-                builder = builder.item(&file_menu).item(&view);
+
+                // Window menu. The OS/WM already provides snapping (Super+Arrow),
+                // so we offer the actions without conflicting accelerators.
+                let minimize = MenuItemBuilder::with_id("win_minimize", "Minimize").build(app)?;
+                let zoom = MenuItemBuilder::with_id("win_zoom", "Maximize").build(app)?;
+                let fill = MenuItemBuilder::with_id("win_fill", "Fill")
+                    .accelerator("Ctrl+Alt+F").build(app)?;
+                let center = MenuItemBuilder::with_id("win_center", "Center").build(app)?;
+                let window_menu = SubmenuBuilder::new(app, "Window")
+                    .item(&minimize)
+                    .item(&zoom)
+                    .separator()
+                    .item(&fill)
+                    .item(&center)
+                    .build()?;
+
+                builder = builder.item(&file_menu).item(&view).item(&window_menu);
             }
 
             builder.build()
         })
         .on_menu_event(|app, event| {
-            match event.id().as_ref() {
+            let id = event.id().as_ref();
+            match id {
                 "open_file" => {
                     let _ = app.emit("menu:open-file", ());
                 }
@@ -522,7 +636,9 @@ pub fn run() {
                         let _ = window.set_fullscreen(!is_fs);
                     }
                 }
-                _ => {}
+                _ => {
+                    handle_window_menu(app, id);
+                }
             }
         })
         .setup(|app| {
@@ -532,10 +648,23 @@ pub fn run() {
             // get_open_tiles() returns the full set when the frontend loads.
             restore_session(&app_handle);
 
-            // Restore window geometry (position, size, fullscreen).
+            // Window geometry (size, position, screen, fullscreen) is restored by
+            // the window-state plugin itself, at `on_window_ready` — which fires
+            // *after* this setup hook. We must NOT call `restore_state` here: doing
+            // so runs before the window is realised, no-ops the resize, and clobbers
+            // the plugin's cached geometry, leaving the window at its default size.
+            //
+            // Once the plugin has restored, clamp the window to the current monitor
+            // (handles a saved size larger than the screen, or a vanished monitor).
+            // We defer this briefly so it runs after the plugin's restore, and on the
+            // main thread, where geometry calls take effect.
             if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.restore_state(StateFlags::all());
-                fix_window_geometry(&window);
+                let win = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    let win2 = win.clone();
+                    let _ = win.run_on_main_thread(move || fix_window_geometry(&win2));
+                });
 
                 let app_for_event = app_handle.clone();
                 let last_fs = Arc::new(AtomicBool::new(
