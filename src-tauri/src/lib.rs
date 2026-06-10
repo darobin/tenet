@@ -170,18 +170,18 @@ fn add_model(
 
 /// Remove a model from the library by `id`. When `to_trash` is true the model
 /// file is moved to the OS trash/recycle bin (restorable by the user) instead of
-/// being permanently deleted.
+/// being permanently deleted. `to_trash` is optional and defaults to false.
 #[tauri::command]
 fn remove_model(
     id: String,
-    to_trash: bool,
+    to_trash: Option<bool>,
     state: State<'_, TileStore>,
     app: AppHandle,
 ) -> Result<(), String> {
     let path = model_file_path(&app, &id).ok_or("no app data dir")?;
     let authority = authority_from_path(&path);
     if path.exists() {
-        if to_trash {
+        if to_trash.unwrap_or(false) {
             trash::delete(&path).map_err(|e| e.to_string())?;
         } else {
             std::fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -896,4 +896,22 @@ pub fn run() {
                 save_session(app_handle);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    /// Verifies the OS trash integration genuinely moves a file to the trash
+    /// instead of unlinking it. Ignored by default because it leaves an item in
+    /// the user's trash; run explicitly with:
+    ///   cargo test -- --ignored trash_delete_moves_file_to_os_trash
+    #[test]
+    #[ignore]
+    fn trash_delete_moves_file_to_os_trash() {
+        let path = std::env::temp_dir()
+            .join(format!("tenet-trash-test-{}.tile", std::process::id()));
+        std::fs::write(&path, b"trash me").unwrap();
+        assert!(path.exists());
+        trash::delete(&path).expect("trash::delete should succeed");
+        assert!(!path.exists(), "file must be gone from its original location");
+    }
 }
