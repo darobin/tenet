@@ -16,6 +16,22 @@ use std::path::{Path, PathBuf};
 
 pub type Resource = HashMap<String, String>;
 
+/// The `model` field of a MASL — same shape as MASL but without `resources`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelManifest {
+    pub name: String,
+    #[serde(default)]
+    pub icons: Vec<Icon>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Masl {
     pub name: String,
@@ -23,7 +39,7 @@ pub struct Masl {
     #[serde(default)]
     pub icons: Vec<Icon>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    pub model: Option<ModelManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -158,7 +174,7 @@ fn parse_header(header_bytes: &[u8]) -> Result<(Masl, Vec<Cid>)> {
     let mut name: Option<String> = None;
     let mut resources: HashMap<String, Resource> = HashMap::new();
     let mut icons: Vec<Icon> = Vec::new();
-    let mut model: Option<String> = None;
+    let mut model: Option<ModelManifest> = None;
     let mut description: Option<String> = None;
     let mut short_name: Option<String> = None;
     let mut theme_color: Option<String> = None;
@@ -169,7 +185,7 @@ fn parse_header(header_bytes: &[u8]) -> Result<(Masl, Vec<Cid>)> {
         let key = cbor_to_string(k).unwrap_or_default();
         match key.as_str() {
             "name" => name = cbor_to_string(v),
-            "model" => model = cbor_to_cid_string(v).or_else(|| cbor_to_string(v)),
+            "model" => model = parse_model_manifest(v).ok(),
             "description" => description = cbor_to_string(v),
             "short_name" => short_name = cbor_to_string(v),
             "theme_color" => theme_color = cbor_to_string(v),
@@ -273,6 +289,39 @@ fn parse_icons(v: &CborValue) -> Result<Vec<Icon>> {
         }
     }
     Ok(out)
+}
+
+fn parse_model_manifest(v: &CborValue) -> Result<ModelManifest> {
+    let map = match v {
+        CborValue::Map(m) => m,
+        _ => bail!("`model` is not a CBOR map"),
+    };
+    let mut name: Option<String> = None;
+    let mut icons: Vec<Icon> = Vec::new();
+    let mut description: Option<String> = None;
+    let mut short_name: Option<String> = None;
+    let mut theme_color: Option<String> = None;
+    let mut background_color: Option<String> = None;
+    for (k, mv) in map {
+        let key = cbor_to_string(k).unwrap_or_default();
+        match key.as_str() {
+            "name" => name = cbor_to_string(mv),
+            "description" => description = cbor_to_string(mv),
+            "short_name" => short_name = cbor_to_string(mv),
+            "theme_color" => theme_color = cbor_to_string(mv),
+            "background_color" => background_color = cbor_to_string(mv),
+            "icons" => icons = parse_icons(mv).unwrap_or_default(),
+            _ => {}
+        }
+    }
+    Ok(ModelManifest {
+        name: name.ok_or_else(|| anyhow!("model missing `name` field"))?,
+        icons,
+        description,
+        short_name,
+        theme_color,
+        background_color,
+    })
 }
 
 // ── Self-modifying tile write ─────────────────────────────────────────────────
@@ -442,6 +491,39 @@ fn cid_str_to_cbor_link(s: &str) -> Option<CborValue> {
     Cid::try_from(s).ok().map(|c| cid_to_cbor_link(&c))
 }
 
+fn build_model_cbor(model: &ModelManifest) -> CborValue {
+    let mut map: Vec<(CborValue, CborValue)> = Vec::new();
+    map.push((CborValue::Text("name".into()), CborValue::Text(model.name.clone())));
+    if let Some(v) = &model.description {
+        map.push((CborValue::Text("description".into()), CborValue::Text(v.clone())));
+    }
+    if let Some(v) = &model.short_name {
+        map.push((CborValue::Text("short_name".into()), CborValue::Text(v.clone())));
+    }
+    if let Some(v) = &model.theme_color {
+        map.push((CborValue::Text("theme_color".into()), CborValue::Text(v.clone())));
+    }
+    if let Some(v) = &model.background_color {
+        map.push((CborValue::Text("background_color".into()), CborValue::Text(v.clone())));
+    }
+    if !model.icons.is_empty() {
+        let icons: Vec<CborValue> = model.icons.iter().map(|icon| {
+            let mut pairs: Vec<(CborValue, CborValue)> = vec![
+                (CborValue::Text("src".into()), CborValue::Text(icon.src.clone())),
+            ];
+            if !icon.sizes.is_empty() {
+                pairs.push((CborValue::Text("sizes".into()), CborValue::Text(icon.sizes.clone())));
+            }
+            if !icon.purpose.is_empty() {
+                pairs.push((CborValue::Text("purpose".into()), CborValue::Text(icon.purpose.clone())));
+            }
+            CborValue::Map(pairs)
+        }).collect();
+        map.push((CborValue::Text("icons".into()), CborValue::Array(icons)));
+    }
+    CborValue::Map(map)
+}
+
 /// Serialise a `Masl` + roots back into the CARv1 header CBOR map.
 fn build_header_cbor(masl: &Masl, roots: &[Cid]) -> CborValue {
     let mut map: Vec<(CborValue, CborValue)> = Vec::new();
@@ -455,9 +537,8 @@ fn build_header_cbor(masl: &Masl, roots: &[Cid]) -> CborValue {
 
     // MASL fields
     map.push((CborValue::Text("name".into()), CborValue::Text(masl.name.clone())));
-    if let Some(v) = &masl.model {
-        let model_cbor = cid_str_to_cbor_link(v).unwrap_or_else(|| CborValue::Text(v.clone()));
-        map.push((CborValue::Text("model".into()), model_cbor));
+    if let Some(model) = &masl.model {
+        map.push((CborValue::Text("model".into()), build_model_cbor(model)));
     }
     if let Some(v) = &masl.description {
         map.push((CborValue::Text("description".into()), CborValue::Text(v.clone())));
