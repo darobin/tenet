@@ -17,7 +17,7 @@ function reducer (state, action) {
     case ADD_TAB: {
       // Ignore if this authority is already open (guards against race between
       // get_open_tiles and tile:opened events both delivering the same tile).
-      const existsIndex = state.tabs.findIndex((t) => t.authority === action.tab.authority)
+      const existsIndex = state.tabs.findIndex((t) => t.authority === action.tab.authority);
       if (existsIndex > -1) {
         return { ...state, activeIndex: existsIndex };
       }
@@ -39,10 +39,13 @@ function reducer (state, action) {
       return { ...state, fullscreen: action.fullscreen };
     }
     case SET_TILE_NAME: {
-      // XXX
-      // - find index
-      // - splice tabs with updated name
-      return { ...state, fullscreen: action.fullscreen };
+      let { tabs } = state;
+      const targetIndex = tabs.findIndex((t) => t.authority === action.authority);
+      if (targetIndex < 0) return;
+      const newTabs = [...tabs];
+      newTabs[targetIndex] = structuredClone(newTabs[targetIndex]);
+      newTabs[targetIndex].masl.name = action.name;
+      return { ...state, tabs: newTabs };
     }
     default:
       return state;
