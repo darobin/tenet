@@ -11,6 +11,8 @@ export const ACTIVATE_TAB = 'ACTIVATE_TAB';
 export const SET_FULLSCREEN = 'SET_FULLSCREEN';
 export const SET_TILE_NAME = 'SET_TILE_NAME';
 export const UPDATE_MODELS = 'UPDATE_MODELS';
+export const OPEN_SIDEBAR = 'OPEN_SIDEBAR';
+export const CLOSE_SIDEBAR = 'CLOSE_SIDEBAR';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 function reducer (state, action) {
@@ -52,13 +54,25 @@ function reducer (state, action) {
     case UPDATE_MODELS: {
       return { ...state, models: action.models };
     }
+    case OPEN_SIDEBAR: {
+      return { ...state, sidebarOpen: true };
+    }
+    case CLOSE_SIDEBAR: {
+      return { ...state, sidebarOpen: false };
+    }
     default:
       return state;
   }
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
-export const appStore = store(reducer, { tabs: [], activeIndex: -1, fullscreen: false, models: [] });
+export const appStore = store(reducer, {
+  tabs: [],
+  activeIndex: -1,
+  fullscreen: false,
+  models: [],
+  sidebarOpen: false,
+});
 window.appStore = appStore;
 
 // ── Interface ─────────────────────────────────────────────────────────────────
@@ -108,6 +122,13 @@ export async function setTileName (authority, name) {
 
 export function updateModels (models) {
   appStore.send({ type: UPDATE_MODELS, models });
+}
+
+export function openSidebar() {
+  appStore.send({ type: OPEN_SIDEBAR });
+}
+export function closeSidebar() {
+  appStore.send({ type: CLOSE_SIDEBAR });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

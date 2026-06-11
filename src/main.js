@@ -1,5 +1,6 @@
 
 import { LitElement, html, css, nothing } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { SignalWatcher } from '@lit-labs/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -9,9 +10,20 @@ import '@supramundane/ui/tab-panel';
 import '@supramundane/ui/tabbed-pane';
 import '@supramundane/ui/toolbar';
 import '@supramundane/ui/tokens/light';
-import { folder2Open, fullscreen, arrowClockwise } from '@supramundane/ui/icons';
+import { folder2Open, fullscreen, arrowClockwise, layoutSidebar, layoutSidebarInset } from '@supramundane/ui/icons';
 import '../css/arepo.css';
-import { addTab, appStore, openTileDialog, setFullscreen, activateTab, closeTab, closeActiveTab, updateModels } from './state.js';
+import {
+  addTab,
+  appStore,
+  openTileDialog,
+  setFullscreen,
+  activateTab,
+  closeTab,
+  closeActiveTab,
+  updateModels,
+  openSidebar,
+  closeSidebar,
+} from './state.js';
 import './el/model-header.js';
 
 
@@ -24,6 +36,9 @@ class TileApp extends SignalWatcher (LitElement) {
       height: 100vh;
       overflow: hidden;
     }
+    .body {
+      flex-grow: 1;
+    }
     .empty {
       flex: 1;
       display: flex;
@@ -32,13 +47,36 @@ class TileApp extends SignalWatcher (LitElement) {
       color: #555;
       font-size: 15px;
     }
+    sm-toolbar {
+      border-bottom: 1px solid var(--sm-panel-border-color);
+      padding-left: 0;
+      transition: var(--sm-transition-medium) padding-left;
+    }
+    sm-toolbar.sidebar-open {
+      padding-left: var(--tnt-sidebar-width);
+    }
+    .body {
+      margin-left: 0;
+      transition: var(--sm-transition-medium) margin-left;
+    }
+    .body.sidebar-open {
+      margin-left: var(--tnt-sidebar-width);
+    }
     sm-tabbed-pane {
-      flex-grow: 1;
+      height: 100%;
+    }
+    sm-tabbed-pane::part(nav) {
+      border-top: none;
     }
     iframe {
-      height: 100%;
+      flex-grow: 1;
       width: 100%;
       border: none;
+    }
+    sm-tab-panel[active]::part(base) {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
   `;
 
@@ -89,14 +127,25 @@ class TileApp extends SignalWatcher (LitElement) {
     ifr.src = ifr.src;
   }
 
+  // XXX
+  // - animation for opening (rather wide)
+  // - list models with icon and description if available (also no items option)
+  // - on hover, show "new" that triggers the right new thing
+  //  - option to remove (with confirm - move to trash if that's a thing we can do)
+  // - in model-header:
+  //  - button to save model (if not already added)
   render () {
     const { fullscreen: isFullscreen } = appStore.get();
-    const { tabs, activeIndex } = appStore.get();
+    const { tabs, activeIndex, sidebarOpen } = appStore.get();
     return html`
       ${
         isFullscreen
         ? nothing
-        : html`<sm-toolbar variant="flat">
+        : html`<sm-toolbar variant="flat" class=${classMap({ 'sidebar-open': sidebarOpen })}>
+            <sm-icon-button label=${sidebarOpen ? "Close side panel" : "Open side panel"} @click=${sidebarOpen ? closeSidebar : openSidebar}>
+              ${(sidebarOpen ? layoutSidebarInset : layoutSidebar)()}
+            </sm-icon-button>
+            <hr>
             <sm-icon-button label="Open tile" @click=${this.#handleOpen}>
               ${folder2Open()}
             </sm-icon-button>
@@ -109,6 +158,7 @@ class TileApp extends SignalWatcher (LitElement) {
             </sm-icon-button>
           </sm-toolbar>`
       }
+      <div class=${classMap({ body: true, 'sidebar-open': sidebarOpen })}>
       ${
         (!tabs.length || activeIndex < 0)
         ? html`<div class="empty">Open a .tile file to get started</div>`
@@ -128,6 +178,7 @@ class TileApp extends SignalWatcher (LitElement) {
           </sm-tabbed-pane>
         `
       }
+      </div>
     `;
   }
 }
