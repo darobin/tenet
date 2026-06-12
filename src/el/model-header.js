@@ -4,7 +4,6 @@ import { SignalWatcher } from '@lit-labs/signals';
 import '@supramundane/ui/input';
 import { setTileName, activeTab } from '../state.js';
 
-
 class ModelHeader extends SignalWatcher (LitElement) {
   static styles = css`
     :host {

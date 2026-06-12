@@ -25,6 +25,10 @@ struct TileStoreInner {
 
 struct TileStore(Mutex<TileStoreInner>);
 
+/// Arbitrary UI state, persisted as a flat key → JSON map in the app data dir.
+/// The frontend owns the shape of each value; the backend just stores it.
+struct UiStateStore(Mutex<HashMap<String, serde_json::Value>>);
+
 // ── Frontend-facing types ────────────────────────────────────────────────────
 
 /// Sent to the frontend when a tile is opened (via command or file-open event).
@@ -360,6 +364,70 @@ fn restore_session<R: tauri::Runtime>(app: &AppHandle<R>) {
     }
 }
 
+// ── UI state persistence ────────────────────────────────────────────────────────
+
+fn ui_state_file<R: tauri::Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("ui-state.json"))
+}
+
+/// Write the in-memory UI-state map to `ui-state.json`. Returns the IO/serialise
+/// error (as a string) if persistence failed; the in-memory value is unaffected.
+fn save_ui_state<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let store = app.state::<UiStateStore>();
+    let bytes = {
+        let map = store.0.lock().unwrap();
+        serde_json::to_vec_pretty(&*map).map_err(|e| e.to_string())?
+    };
+    let file = ui_state_file(app).ok_or("no app data dir")?;
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&file, bytes).map_err(|e| e.to_string())
+}
+
+/// Load `ui-state.json` into the managed store at startup. Missing or malformed
+/// files are ignored (the store simply stays empty).
+fn restore_ui_state<R: tauri::Runtime>(app: &AppHandle<R>) {
+    let Some(file) = ui_state_file(app) else { return };
+    let Ok(data) = std::fs::read_to_string(&file) else { return };
+    let Ok(map) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&data) else {
+        return;
+    };
+    *app.state::<UiStateStore>().0.lock().unwrap() = map;
+}
+
+/// Persist a single UI-state entry under `key` and flush to disk. Pass `null`
+/// as the value to clear a key.
+#[tauri::command]
+fn set_ui_state(
+    key: String,
+    value: serde_json::Value,
+    state: State<'_, UiStateStore>,
+    app: AppHandle,
+) -> Result<(), String> {
+    state.0.lock().unwrap().insert(key, value);
+    save_ui_state(&app)
+}
+
+/// Retrieve the UI-state value stored under `key`, or `null` if unset.
+#[tauri::command]
+fn get_ui_state(key: String, state: State<'_, UiStateStore>) -> serde_json::Value {
+    state
+        .0
+        .lock()
+        .unwrap()
+        .get(&key)
+        .cloned()
+        .unwrap_or(serde_json::Value::Null)
+}
+
+/// Retrieve the entire UI-state map — convenient for hydrating the frontend on
+/// startup in a single call.
+#[tauri::command]
+fn get_all_ui_state(state: State<'_, UiStateStore>) -> HashMap<String, serde_json::Value> {
+    state.0.lock().unwrap().clone()
+}
+
 // ── tile: custom protocol ─────────────────────────────────────────────────────
 
 /// JS module served at `tile://<authority>/.well-known/web-tiles/store.js`.
@@ -683,10 +751,11 @@ pub fn run() {
             map: HashMap::new(),
             paths: Vec::new(),
         })))
+        .manage(UiStateStore(Mutex::new(HashMap::new())))
         .register_uri_scheme_protocol("tile", |ctx, request| {
             handle_tile_protocol(ctx.app_handle(), request)
         })
-        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name, add_model, remove_model, list_models, create_tile_from_model])
+        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name, add_model, remove_model, list_models, create_tile_from_model, set_ui_state, get_ui_state, get_all_ui_state])
         .menu(|app| {
             let mut builder = MenuBuilder::new(app);
 
@@ -816,6 +885,10 @@ pub fn run() {
             // Restore the previous session before anything else, so that
             // get_open_tiles() returns the full set when the frontend loads.
             restore_session(&app_handle);
+
+            // Load persisted UI state so get_ui_state/get_all_ui_state are
+            // populated as soon as the frontend asks.
+            restore_ui_state(&app_handle);
 
             // Window geometry (size, position, screen, fullscreen) is restored by
             // the window-state plugin itself, at `on_window_ready` — which fires

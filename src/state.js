@@ -11,8 +11,8 @@ export const ACTIVATE_TAB = 'ACTIVATE_TAB';
 export const SET_FULLSCREEN = 'SET_FULLSCREEN';
 export const SET_TILE_NAME = 'SET_TILE_NAME';
 export const UPDATE_MODELS = 'UPDATE_MODELS';
-export const OPEN_SIDEBAR = 'OPEN_SIDEBAR';
-export const CLOSE_SIDEBAR = 'CLOSE_SIDEBAR';
+export const SET_UI_STATE = 'SET_UI_STATE';
+export const UPDATE_UI_STATE = 'UPDATE_UI_STATE';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 function reducer (state, action) {
@@ -54,11 +54,12 @@ function reducer (state, action) {
     case UPDATE_MODELS: {
       return { ...state, models: action.models };
     }
-    case OPEN_SIDEBAR: {
-      return { ...state, sidebarOpen: true };
+    case SET_UI_STATE: {
+      return { ...state, uiState: action.uiState };
     }
-    case CLOSE_SIDEBAR: {
-      return { ...state, sidebarOpen: false };
+    case UPDATE_UI_STATE: {
+      let { uiState } = state;
+      return { ...state, uiState: { ...uiState , [action.key]: action.value } };
     }
     default:
       return state;
@@ -71,7 +72,7 @@ export const appStore = store(reducer, {
   activeIndex: -1,
   fullscreen: false,
   models: [],
-  sidebarOpen: false,
+  uiState: {},
 });
 window.appStore = appStore;
 
@@ -124,12 +125,28 @@ export function updateModels (models) {
   appStore.send({ type: UPDATE_MODELS, models });
 }
 
-export function openSidebar() {
-  appStore.send({ type: OPEN_SIDEBAR });
+export function setUIState (uiState) {
+  appStore.send({ type: SET_UI_STATE, uiState });
 }
-export function closeSidebar() {
-  appStore.send({ type: CLOSE_SIDEBAR });
+export async function updateUIState (key, value) {
+  appStore.send({ type: UPDATE_UI_STATE, key, value });
+  await invoke('set_ui_state', { key, value });
 }
+export async function openSidebar () {
+  await updateUIState('sidebarOpen', true);
+}
+export async function closeSidebar () {
+  await updateUIState('sidebarOpen', false);
+}
+
+// await invoke('remove_model', { id, toTrash: true });
+// - add_model(authority) — turns the open tile into a library model. Requires model.id (errors otherwise). Keyed by id, so re-adding the same id overwrites it — this is your add and update.
+// - remove_model(id) — deletes the file and drops it from the store.
+// - list_models() -> [ModelEntry] — every model with { id, authority, url, masl }, sorted by name.
+// - create_tile_from_model(id) — shows a native .tile save prompt (Rust-side, non-blocking), copies the model to the chosen path, and opens it in a new tab via the existing tile:opened flow.
+//
+// const entry = (await invoke('list_models'))[0];
+// const iconUrl = new URL(entry.masl.icons[0].src, entry.url).href; // tile://…/icon.svg
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export function activeTab () {

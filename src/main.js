@@ -23,8 +23,10 @@ import {
   updateModels,
   openSidebar,
   closeSidebar,
+  setUIState,
 } from './state.js';
 import './el/model-header.js';
+import './el/sidebar.js';
 
 
 // ── Root app shell ────────────────────────────────────────────────────────────
@@ -44,8 +46,9 @@ class TileApp extends SignalWatcher (LitElement) {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #555;
-      font-size: 15px;
+      color: var(--sm-color-neutral-500);
+      font-size: var(--sm-font-size-medium);
+      height: 100%;
     }
     sm-toolbar {
       border-bottom: 1px solid var(--sm-panel-border-color);
@@ -61,6 +64,17 @@ class TileApp extends SignalWatcher (LitElement) {
     }
     .body.sidebar-open {
       margin-left: var(--tnt-sidebar-width);
+    }
+    tnt-sidebar {
+      position: fixed;
+      width: var(--tnt-sidebar-width);
+      left: calc(-1 * var(--tnt-sidebar-width));
+      top: 46px;
+      bottom: 0;
+      transition: var(--sm-transition-medium) left;
+    }
+    tnt-sidebar.sidebar-open {
+      left: 0;
     }
     sm-tabbed-pane {
       height: 100%;
@@ -90,6 +104,10 @@ class TileApp extends SignalWatcher (LitElement) {
       console.warn(`get_open_tiles`, tiles);
       for (const tile of tiles) addTab(tile.authority, tile.masl, tile.url);
     });
+    invoke('get_all_ui_state').then((uiState) => {
+      console.warn(`ui state`, uiState);
+      setUIState(uiState);
+    });
     listen('models:changed', (ev) => {
       updateModels(ev.payload);
     });
@@ -116,7 +134,6 @@ class TileApp extends SignalWatcher (LitElement) {
   #handleCloseTab (ev) {
     ev.preventDefault();
     closeTab(ev.detail.activeIndex);
-    // activateTab(ev.detail.nextIndex); // XXX testing without, shouldn't be needed
   }
   #handleFullscreen (ev) {
     invoke('set_fullscreen', { fullscreen: true });
@@ -128,7 +145,6 @@ class TileApp extends SignalWatcher (LitElement) {
   }
 
   // XXX
-  // - animation for opening (rather wide)
   // - list models with icon and description if available (also no items option)
   // - on hover, show "new" that triggers the right new thing
   //  - option to remove (with confirm - move to trash if that's a thing we can do)
@@ -136,7 +152,8 @@ class TileApp extends SignalWatcher (LitElement) {
   //  - button to save model (if not already added)
   render () {
     const { fullscreen: isFullscreen } = appStore.get();
-    const { tabs, activeIndex, sidebarOpen } = appStore.get();
+    const { tabs, activeIndex, uiState } = appStore.get();
+    const { sidebarOpen } = uiState || {};
     return html`
       ${
         isFullscreen
@@ -158,6 +175,7 @@ class TileApp extends SignalWatcher (LitElement) {
             </sm-icon-button>
           </sm-toolbar>`
       }
+      <tnt-sidebar class=${classMap({ 'sidebar-open': sidebarOpen })}></tnt-sidebar>
       <div class=${classMap({ body: true, 'sidebar-open': sidebarOpen })}>
       ${
         (!tabs.length || activeIndex < 0)
