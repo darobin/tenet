@@ -108,6 +108,10 @@ class TileApp extends SignalWatcher (LitElement) {
       console.warn(`ui state`, uiState);
       setUIState(uiState);
     });
+    invoke('get_models').then((models) => {
+      console.warn(`models`, models);
+      updateModels(models);
+    });
     listen('models:changed', (ev) => {
       updateModels(ev.payload);
     });

@@ -2,14 +2,22 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { SignalWatcher } from '@lit-labs/signals';
 import '@supramundane/ui/input';
-import { setTileName, activeTab } from '../state.js';
+import "@supramundane/ui/button";
+import "@supramundane/ui/icon";
+import { floppy } from '@supramundane/ui/icons';
+import { setTileName, activeTab, addModel, appStore } from '../state.js';
 
 class ModelHeader extends SignalWatcher (LitElement) {
   static styles = css`
     :host {
       display: block;
     }
+    form {
+      flex-grow: 1;
+    }
     .model-header {
+      display: flex;
+      gap: var(--sm-spacing-small);
       padding: var(--sm-spacing-small);
       background: var(--sm-color-accent-50);
       border-bottom: 1px solid var(--sm-panel-border-color);
@@ -28,6 +36,9 @@ class ModelHeader extends SignalWatcher (LitElement) {
       background-color: var(--sm-input-background-color);
       border-color: var(--sm-input-border-color);
     }
+    .actions {
+      align-content: center;
+    }
   `;
 
   #handleSubmit (ev) {
@@ -39,15 +50,28 @@ class ModelHeader extends SignalWatcher (LitElement) {
     const authority = activeTab()?.authority;
     setTileName(authority, ev.target.value);
   }
+  #handleSaveModel () {
+    const authority = activeTab()?.authority;
+    addModel(authority);
+  }
   // For now it's only the name, we can add description and banner later.
   render () {
     const masl = activeTab()?.masl;
     if (!masl?.model) return nothing;
+    const { models } = appStore.get();
+    const savedModel = models?.find(m => m.id === masl.model.id);
     return html`
       <div class="model-header">
         <form @submit=${this.#handleSubmit}>
-          <sm-input @blur=${this.#handleBlur} value=${masl.name || masl.model?.name} id="name"></sm-input>
+          <sm-input @blur=${this.#handleBlur} value=${masl.name || masl.model?.name} id="name" placeholder="Document title"></sm-input>
         </form>
+        <div class="actions">
+          ${
+            savedModel
+            ? html`<sm-button disabled outline>${floppy({ slot: 'prefix' })}Model saved</sm-button>`
+            : html`<sm-button @click=${this.#handleSaveModel}>${floppy({ slot: 'prefix' })}Save Model</sm-button>`
+          }
+        </div>
       </div>
     `;
   }

@@ -319,8 +319,10 @@ fn parse_model_manifest(v: &CborValue) -> Result<ModelManifest> {
             _ => {}
         }
     }
+    // `name` is intentionally not required here: a `model` map must always
+    // decode so that `model.id` survives even when the rest is incomplete.
     Ok(ModelManifest {
-        name: name.ok_or_else(|| anyhow!("model missing `name` field"))?,
+        name: name.unwrap_or_default(),
         id,
         icons,
         description,
@@ -795,6 +797,18 @@ mod tests {
 
     fn sample() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tiles/very-basic-self-save.tile")
+    }
+
+    #[test]
+    fn model_id_decodes_even_without_name() {
+        // A model map carrying only `id` must still decode, preserving the id.
+        let model = CborValue::Map(vec![(
+            CborValue::Text("id".into()),
+            CborValue::Text("com.example.thing".into()),
+        )]);
+        let parsed = parse_model_manifest(&model).expect("model map should decode");
+        assert_eq!(parsed.id.as_deref(), Some("com.example.thing"));
+        assert_eq!(parsed.name, "");
     }
 
     #[test]

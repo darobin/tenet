@@ -124,6 +124,10 @@ export async function setTileName (authority, name) {
 export function updateModels (models) {
   appStore.send({ type: UPDATE_MODELS, models });
 }
+export async function addModel (authority) {
+  console.warn(`adding model for ${authority}`);
+  await invoke('add_model', { authority });
+}
 
 export function setUIState (uiState) {
   appStore.send({ type: SET_UI_STATE, uiState });
@@ -142,10 +146,10 @@ export async function closeSidebar () {
 // await invoke('remove_model', { id, toTrash: true });
 // - add_model(authority) — turns the open tile into a library model. Requires model.id (errors otherwise). Keyed by id, so re-adding the same id overwrites it — this is your add and update.
 // - remove_model(id) — deletes the file and drops it from the store.
-// - list_models() -> [ModelEntry] — every model with { id, authority, url, masl }, sorted by name.
+// - get_models() -> [ModelEntry] — every model with { id, authority, url, masl }, sorted by name.
 // - create_tile_from_model(id) — shows a native .tile save prompt (Rust-side, non-blocking), copies the model to the chosen path, and opens it in a new tab via the existing tile:opened flow.
 //
-// const entry = (await invoke('list_models'))[0];
+// const entry = (await invoke('get_models'))[0];
 // const iconUrl = new URL(entry.masl.icons[0].src, entry.url).href; // tile://…/icon.svg
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

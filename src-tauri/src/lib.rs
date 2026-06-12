@@ -196,10 +196,11 @@ fn remove_model(
     Ok(())
 }
 
-/// List every model in the library with its metadata. Each entry is also loaded
-/// into the store so its icon is reachable at `tile://<authority>/<icon>`.
+/// Get every model in the library with its metadata — the pull-based equivalent
+/// of the `models:changed` event. Each entry is also loaded into the store so
+/// its icon is reachable at `tile://<authority>/<icon>`.
 #[tauri::command]
-fn list_models(state: State<'_, TileStore>, app: AppHandle) -> Vec<ModelEntry> {
+fn get_models(state: State<'_, TileStore>, app: AppHandle) -> Vec<ModelEntry> {
     collect_models(&state, &app)
 }
 
@@ -755,7 +756,7 @@ pub fn run() {
         .register_uri_scheme_protocol("tile", |ctx, request| {
             handle_tile_protocol(ctx.app_handle(), request)
         })
-        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name, add_model, remove_model, list_models, create_tile_from_model, set_ui_state, get_ui_state, get_all_ui_state])
+        .invoke_handler(tauri::generate_handler![open_tile, get_open_tiles, close_tile, set_fullscreen, set_title, set_tile_name, add_model, remove_model, get_models, create_tile_from_model, set_ui_state, get_ui_state, get_all_ui_state])
         .menu(|app| {
             let mut builder = MenuBuilder::new(app);
 
